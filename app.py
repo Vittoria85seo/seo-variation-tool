@@ -7,22 +7,21 @@ import re
 st.title("SEO Variation & Structure Analyzer")
 
 # --- Upload section ---
-st.header("1. Upload Files")
-user_file = st.file_uploader("Upload your HTML file", type="html", key="user")
-competitor_files = st.file_uploader("Upload competitor HTML files (10 max)", type="html", accept_multiple_files=True, key="comps")
+st.header("1. Upload Your Page and Competitors")
+user_file = st.file_uploader("Upload your HTML file (your page)", type="html", key="user")
+competitor_files = st.file_uploader("Upload 10 competitor HTML files", type="html", accept_multiple_files=True, key="comps")
 
 # --- Variation input ---
-st.header("2. Enter Variations List")
-variations_text = st.text_area("Enter comma-separated variations")
+st.header("2. Enter Variation Terms")
+variations_text = st.text_area("Enter comma-separated variation phrases (e.g. fleecejacka herr, fleecetröja)")
 variations = [v.strip().lower() for v in variations_text.split(",") if v.strip()] if variations_text else []
 variation_parts = set()
 for v in variations:
-    parts = v.split()
-    variation_parts.update(parts)
+    variation_parts.update(v.split())
 variation_parts.update(variations)
 
 # --- Weighting ---
-st.header("3. Adjust Competitor Weighting (Top to Bottom Rank)")
+st.header("3. Competitor Weighting")
 def default_weights(n):
     return [round(1.5 - i*0.1, 2) for i in range(n)]
 
@@ -32,7 +31,7 @@ if competitor_files:
 else:
     weight_inputs = []
 
-# --- Word count function ---
+# --- Word count ---
 def cleaned_word_count(soup):
     for script in soup(["script", "style"]):
         script.extract()
@@ -40,7 +39,7 @@ def cleaned_word_count(soup):
     text = re.sub(r'\s+', ' ', text)
     return len(text.split())
 
-# --- Variation match logic: each variation counts once per tag (no duplicate per tag), overlaps allowed ---
+# --- Count logic: distinct matches per tag, overlap allowed ---
 def count_distinct_variations_per_tag(soup, tag, variation_set):
     tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p", "li"])
     count = 0
@@ -55,7 +54,7 @@ def count_distinct_variations_per_tag(soup, tag, variation_set):
         count += len(found)
     return count
 
-# --- Extraction function ---
+# --- Extract info from file ---
 def extract_word_count_and_sections(file):
     content = file.read()
     soup = BeautifulSoup(content, "html.parser")
@@ -71,7 +70,6 @@ def extract_word_count_and_sections(file):
 # --- Main logic ---
 if user_file and competitor_files and variations:
     user_word_count, user_structure = extract_word_count_and_sections(user_file)
-
     comp_word_counts = []
     comp_structures = []
     for comp_file in competitor_files:
@@ -83,35 +81,35 @@ if user_file and competitor_files and variations:
     scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
 
     def compute_section_range(section):
-        values = [s[section] for s in comp_structures]
-        values_sorted = sorted(values)
+        counts = [s[section] for s in comp_structures]
+        counts_sorted = sorted(counts)
 
         if section == "p":
-            trimmed = values_sorted[1:-1] if len(values_sorted) > 4 else values_sorted
+            trimmed = counts_sorted[1:-1] if len(counts_sorted) > 4 else counts_sorted
         elif section == "h3":
-            capped = [min(v, 20) for v in values_sorted]
+            capped = [min(v, 20) for v in counts_sorted]
             trimmed = capped[:-1] if len(capped) > 4 else capped
         elif section == "h2":
-            trimmed = values_sorted[:-1] if len(values_sorted) > 4 else values_sorted
-        else:  # h4
-            trimmed = values_sorted
+            trimmed = counts_sorted[:-1] if len(counts_sorted) > 4 else counts_sorted
+        else:
+            trimmed = counts_sorted
 
         p10 = np.percentile(trimmed, 10)
         p90 = np.percentile(trimmed, 90)
         return int(np.floor(p10 * scale)), int(np.ceil(p90 * scale))
 
-    # --- Output section ---
-    st.subheader("Tag Placement Recommendations (Variation Match Count)")
+    # --- Output ---
+    st.header("4. Tag Placement Recommendations")
     recs = []
     for sec in ["h2", "h3", "h4", "p"]:
         min_val, max_val = compute_section_range(sec)
         current = user_structure[sec]
         status = "Too few" if current < min_val else ("Too many" if current > max_val else "OK")
         recs.append({
-            "Section": sec.upper(),
-            "Current": current,
-            "Target Min": min_val,
-            "Target Max": max_val,
+            "Tag": sec.upper(),
+            "Current Matches": current,
+            "Recommended Min": min_val,
+            "Recommended Max": max_val,
             "Status": status
         })
 
