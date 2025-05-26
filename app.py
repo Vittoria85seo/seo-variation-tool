@@ -1,4 +1,3 @@
-
 import streamlit as st
 import numpy as np
 from bs4 import BeautifulSoup
@@ -41,16 +40,19 @@ def cleaned_word_count(soup):
     text = re.sub(r'\s+', ' ', text)
     return len(text.split())
 
-# --- Variation match logic: once per variation per tag ---
-def count_variation_matches(soup, tag, variation_set):
+# --- Variation match logic: each variation counts once per tag (no duplicate per tag), overlaps allowed ---
+def count_distinct_variations_per_tag(soup, tag, variation_set):
     tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p", "li"])
     count = 0
+    sorted_vars = sorted(variation_set, key=lambda x: -len(x))
     for el in tags:
         text = el.get_text(separator=' ', strip=True).lower()
-        for var in variation_set:
+        found = set()
+        for var in sorted_vars:
             pattern = r'(?<!\w)' + re.escape(var) + r'(?!\w)'
             if re.search(pattern, text):
-                count += 1
+                found.add(var)
+        count += len(found)
     return count
 
 # --- Extraction function ---
@@ -59,10 +61,10 @@ def extract_word_count_and_sections(file):
     soup = BeautifulSoup(content, "html.parser")
     word_count = cleaned_word_count(soup)
     structure = {
-        "h2": count_variation_matches(soup, "h2", variation_parts),
-        "h3": count_variation_matches(soup, "h3", variation_parts),
-        "h4": count_variation_matches(soup, "h4", variation_parts),
-        "p": count_variation_matches(soup, "p", variation_parts)
+        "h2": count_distinct_variations_per_tag(soup, "h2", variation_parts),
+        "h3": count_distinct_variations_per_tag(soup, "h3", variation_parts),
+        "h4": count_distinct_variations_per_tag(soup, "h4", variation_parts),
+        "p": count_distinct_variations_per_tag(soup, "p", variation_parts)
     }
     return word_count, structure
 
@@ -78,27 +80,31 @@ if user_file and competitor_files and variations:
         comp_structures.append(struct)
 
     avg_word_count = np.average(comp_word_counts, weights=weight_inputs)
+    scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
 
-    def compute_dynamic_range(section):
-        section_counts_all = [s[section] for s in comp_structures]
-        sorted_counts = sorted(section_counts_all)
-        trim_n = max(1, len(sorted_counts) // 5)
+    def compute_section_range(section):
+        counts = [s[section] for s in comp_structures]
+        counts_sorted = sorted(counts)
 
-        trimmed = sorted_counts[trim_n:-trim_n] if len(sorted_counts) > 2 * trim_n else sorted_counts
-        trimmed_weights = weight_inputs[trim_n:-trim_n] if len(weight_inputs) > 2 * trim_n else weight_inputs[:len(trimmed)]
+        if section == "p":
+            trimmed = counts_sorted[1:-1] if len(counts_sorted) > 4 else counts_sorted
+        elif section == "h3":
+            capped = [min(v, 20) for v in counts_sorted]
+            trimmed = capped[:-1] if len(capped) > 4 else capped
+        elif section == "h2":
+            trimmed = counts_sorted[:-1] if len(counts_sorted) > 4 else counts_sorted
+        else:  # h4
+            trimmed = counts_sorted
 
-        mean = np.average(trimmed, weights=trimmed_weights)
-        std = np.sqrt(np.average((np.array(trimmed) - mean) ** 2, weights=trimmed_weights))
+        p10 = np.percentile(trimmed, 10)
+        p90 = np.percentile(trimmed, 90)
+        return int(np.floor(p10 * scale)), int(np.ceil(p90 * scale))
 
-        scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
-        min_val = max(0, int(np.floor((mean - 0.8 * std) * scale)))
-        max_val = int(np.ceil((mean + 0.8 * std) * scale))
-        return min_val, max_val
-
+    # --- Output section ---
     st.subheader("Tag Placement Recommendations (Variation Match Count)")
     recs = []
     for sec in ["h2", "h3", "h4", "p"]:
-        min_val, max_val = compute_dynamic_range(sec)
+        min_val, max_val = compute_section_range(sec)
         current = user_structure[sec]
         status = "Too few" if current < min_val else ("Too many" if current > max_val else "OK")
         recs.append({
