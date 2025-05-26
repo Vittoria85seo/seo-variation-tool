@@ -32,7 +32,7 @@ def default_weights(n):
 
 if competitor_files:
     default_w = default_weights(len(competitor_files))
-    weight_inputs = [st.number_input(f"Weight for Competitor {i+1}", value=w, step=0.1) for i, w in enumerate(default_w)]
+    weight_inputs = [st.number_input(f"Weight for Competitor {i+1} ({competitor_urls[i] if i < len(competitor_urls) else 'URL missing'})", value=w, step=0.1) for i, w in enumerate(default_w)]
 else:
     weight_inputs = []
 
