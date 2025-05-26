@@ -1,3 +1,4 @@
+
 import streamlit as st
 import numpy as np
 from bs4 import BeautifulSoup
@@ -15,7 +16,11 @@ competitor_files = st.file_uploader("Upload competitor HTML files (10 max)", typ
 st.header("2. Enter Variations List")
 variations_text = st.text_area("Enter comma-separated variations")
 variations = [v.strip().lower() for v in variations_text.split(",") if v.strip()] if variations_text else []
-variation_parts = set(variations)
+variation_parts = set()
+for v in variations:
+    parts = v.split()
+    variation_parts.update(parts)
+variation_parts.update(variations)
 
 # --- Weighting ---
 st.header("3. Adjust Competitor Weighting (Top to Bottom Rank)")
@@ -28,7 +33,7 @@ if competitor_files:
 else:
     weight_inputs = []
 
-# --- Word count ---
+# --- Word count function ---
 def cleaned_word_count(soup):
     for script in soup(["script", "style"]):
         script.extract()
@@ -36,19 +41,22 @@ def cleaned_word_count(soup):
     text = re.sub(r'\s+', ' ', text)
     return len(text.split())
 
-# --- Variation match counter ---
+# --- Variation match count ---
 def count_variation_matches(soup, tag, variation_set):
     tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p", "li"])
     count = 0
     for el in tags:
         text = el.get_text(separator=' ', strip=True).lower()
+        found = set()
         for var in variation_set:
             pattern = r'(?<!\w)' + re.escape(var) + r'(?!\w)'
             matches = re.findall(pattern, text)
-            count += len(matches)
+            if matches:
+                found.update([var]*len(matches))
+        count += len(found)
     return count
 
-# --- Extraction ---
+# --- Extract data ---
 def extract_word_count_and_sections(file):
     content = file.read()
     soup = BeautifulSoup(content, "html.parser")
@@ -59,38 +67,31 @@ def extract_word_count_and_sections(file):
         "h4": count_variation_matches(soup, "h4", variation_parts),
         "p": count_variation_matches(soup, "p", variation_parts)
     }
-    return word_count, structure, content
+    return word_count, structure
 
-# --- Main ---
+# --- Main logic ---
 if user_file and competitor_files and variations:
-    user_word_count, user_structure, user_content = extract_word_count_and_sections(user_file)
+    user_word_count, user_structure = extract_word_count_and_sections(user_file)
 
     comp_word_counts = []
     comp_structures = []
     for comp_file in competitor_files:
-        wc, struct, _ = extract_word_count_and_sections(comp_file)
+        wc, struct = extract_word_count_and_sections(comp_file)
         comp_word_counts.append(wc)
         comp_structures.append(struct)
 
     avg_word_count = np.average(comp_word_counts, weights=weight_inputs)
 
     def compute_dynamic_range(section):
-        section_counts_all = [s[section] for s in comp_structures]
-        sorted_counts = sorted(section_counts_all)
-        trim_n = max(1, len(sorted_counts) // 5)
-
-        trimmed = sorted_counts[trim_n:-trim_n] if len(sorted_counts) > 2 * trim_n else sorted_counts
-        trimmed_weights = weight_inputs[trim_n:-trim_n] if len(weight_inputs) > 2 * trim_n else weight_inputs[:len(trimmed)]
-
-        mean = np.average(trimmed, weights=trimmed_weights)
-        std = np.sqrt(np.average((np.array(trimmed) - mean) ** 2, weights=trimmed_weights))
-
+        section_counts = np.array([s[section] for s in comp_structures])
+        mean = np.average(section_counts, weights=weight_inputs)
+        std = np.sqrt(np.average((section_counts - mean) ** 2, weights=weight_inputs))
         scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
         min_val = max(0, int(np.floor((mean - 0.8 * std) * scale)))
         max_val = int(np.ceil((mean + 0.8 * std) * scale))
         return min_val, max_val
 
-    st.subheader("Tag Placement Recommendations (Dynamic Math-Based)")
+    st.subheader("Tag Placement Recommendations (Variation Match Count)")
     recs = []
     for sec in ["h2", "h3", "h4", "p"]:
         min_val, max_val = compute_dynamic_range(sec)
@@ -101,7 +102,7 @@ if user_file and competitor_files and variations:
             "Current": current,
             "Target Min": min_val,
             "Target Max": max_val,
-            "Action": status
+            "Status": status
         })
 
     st.dataframe(pd.DataFrame(recs))
