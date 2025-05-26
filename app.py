@@ -29,35 +29,34 @@ else:
     weight_inputs = []
 
 # --- Extraction Function ---
-def extract_text(file):
+def extract_sections(file):
     soup = BeautifulSoup(file.read(), "html.parser")
-    texts = []
+    text_tokens = []
     for tag in ["h2", "h3", "h4", "p", "li"]:
         elements = soup.find_all(tag)
-        texts.extend([el.get_text(separator=' ', strip=True).lower() for el in elements])
-    return " ".join(texts)
+        text_tokens.extend([el.get_text(separator=' ', strip=True).lower() for el in elements])
+    return " ".join(text_tokens), {
+        "h2": len(soup.find_all("h2")),
+        "h3": len(soup.find_all("h3")),
+        "h4": len(soup.find_all("h4")),
+        "p": len(set(
+            el.get_text(separator=' ', strip=True).lower()
+            for el in soup.find_all(["p", "li"])
+        ))
+    }
 
 # --- Main Processing ---
 if user_file and competitor_files and variations:
-    user_text = extract_text(user_file)
+    user_text, user_structure = extract_sections(user_file)
     user_tokens = user_text.split()
     user_counts = {v: sum(1 for t in user_tokens if t == v) for v in variations}
 
     comp_data = []
     for comp_file in competitor_files:
-        comp_text = extract_text(comp_file)
+        comp_text, structure = extract_sections(comp_file)
         tokens = comp_text.split()
         counts = {v: sum(1 for t in tokens if t == v) for v in variations}
-        sections = {
-            "h2": len(BeautifulSoup(comp_file.read(), "html.parser").find_all("h2")),
-            "h3": len(BeautifulSoup(comp_file.read(), "html.parser").find_all("h3")),
-            "h4": len(BeautifulSoup(comp_file.read(), "html.parser").find_all("h4")),
-            "p": len(set(
-                t.get_text(strip=True).lower()
-                for t in BeautifulSoup(comp_file.read(), "html.parser").find_all(["p", "li"])
-            ))
-        }
-        comp_data.append((counts, sections))
+        comp_data.append((counts, structure))
 
     # Weighted variation analysis
     def weighted_stat(v):
@@ -86,13 +85,6 @@ if user_file and competitor_files and variations:
         return int(mean), round(std, 2), min_t, max_t
 
     st.subheader("Tag Placement Recommendations")
-    user_structure = {
-        "h2": user_text.count("<h2"),
-        "h3": user_text.count("<h3"),
-        "h4": user_text.count("<h4"),
-        "p": len(set(BeautifulSoup(user_file.read(), "html.parser").get_text().split()))
-    }
-
     rows = []
     for sec in ["h2", "h3", "h4", "p"]:
         mean, std, min_val, max_val = section_stats(sec)
