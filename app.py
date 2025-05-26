@@ -83,18 +83,18 @@ if user_file and competitor_files and variations:
     scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
 
     def compute_section_range(section):
-        counts = [s[section] for s in comp_structures]
-        counts_sorted = sorted(counts)
+        values = [s[section] for s in comp_structures]
+        values_sorted = sorted(values)
 
         if section == "p":
-            trimmed = counts_sorted[1:-1] if len(counts_sorted) > 4 else counts_sorted
+            trimmed = values_sorted[1:-1] if len(values_sorted) > 4 else values_sorted
         elif section == "h3":
-            capped = [min(v, 20) for v in counts_sorted]
+            capped = [min(v, 20) for v in values_sorted]
             trimmed = capped[:-1] if len(capped) > 4 else capped
         elif section == "h2":
-            trimmed = counts_sorted[:-1] if len(counts_sorted) > 4 else counts_sorted
+            trimmed = values_sorted[:-1] if len(values_sorted) > 4 else values_sorted
         else:  # h4
-            trimmed = counts_sorted
+            trimmed = values_sorted
 
         p10 = np.percentile(trimmed, 10)
         p90 = np.percentile(trimmed, 90)
