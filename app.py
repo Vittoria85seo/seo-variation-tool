@@ -94,8 +94,7 @@ def compute_dynamic_range(section):
         min_val = max(0, int(np.floor((mean - 0.8 * std) * scale)))
         max_val = int(np.ceil((mean + 0.8 * std) * scale))
         return min_val, max_val
-
-    st.subheader("Tag Placement Recommendations (Dynamic Math-Based)")
+st.subheader("Tag Placement Recommendations (Dynamic Math-Based)")
     recs = []
     for sec in ["h2", "h3", "h4", "p"]:
         min_val, max_val = compute_dynamic_range(sec)
