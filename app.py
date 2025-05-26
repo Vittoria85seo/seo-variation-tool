@@ -29,37 +29,43 @@ else:
     weight_inputs = []
 
 # --- Extraction Function ---
-def extract_sections(file):
+def extract_variation_counts(file, variations):
     content = file.read()
     soup = BeautifulSoup(content, "html.parser")
-    text_tokens = []
-    for tag in ["h2", "h3", "h4", "p", "li"]:
-        elements = soup.find_all(tag)
-        text_tokens.extend([el.get_text(separator=' ', strip=True).lower() for el in elements])
-    return " ".join(text_tokens), {
-        "h2": len(soup.find_all("h2")),
-        "h3": len(soup.find_all("h3")),
-        "h4": len(soup.find_all("h4")),
-        "p": len(set(
-            el.get_text(separator=' ', strip=True).lower()
-            for el in soup.find_all(["p", "li"])
-        ))
-    }, content  # Also return raw content for later reuse
+    counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
+
+    for tag in ["h2", "h3", "h4"]:
+        for el in soup.find_all(tag):
+            txt = el.get_text(separator=' ', strip=True).lower()
+            counts[tag] += sum(txt.count(v) for v in variations)
+
+    # Combine <p> and <li> as paragraph sources, without duplicates
+    para_texts = set(
+        el.get_text(separator=' ', strip=True).lower()
+        for el in soup.find_all(["p", "li"])
+        if el.get_text(strip=True)
+    )
+    counts["p"] = sum(
+        sum(text.count(v) for v in variations)
+        for text in para_texts
+    )
+
+    full_text = " ".join(para_texts)
+    token_list = full_text.split()
+    variation_counts = {v: token_list.count(v) for v in variations}
+
+    return variation_counts, counts
 
 # --- Main Processing ---
 if user_file and competitor_files and variations:
-    user_text, user_structure, user_raw = extract_sections(user_file)
-    user_tokens = user_text.split()
-    user_counts = {v: sum(1 for t in user_tokens if t == v) for v in variations}
+    user_var_counts, user_struct_counts = extract_variation_counts(user_file, variations)
 
     comp_data = []
     for comp_file in competitor_files:
-        comp_text, structure, _ = extract_sections(comp_file)
-        tokens = comp_text.split()
-        counts = {v: sum(1 for t in tokens if t == v) for v in variations}
-        comp_data.append((counts, structure))
+        var_counts, struct_counts = extract_variation_counts(comp_file, variations)
+        comp_data.append((var_counts, struct_counts))
 
-    # Weighted variation analysis
+    # Weighted variation stats
     def weighted_stat(v):
         vals = np.array([comp[0][v] for comp in comp_data])
         mean = np.average(vals, weights=weight_inputs)
@@ -68,7 +74,7 @@ if user_file and competitor_files and variations:
 
     var_table = []
     for v in variations:
-        c = user_counts[v]
+        c = user_var_counts[v]
         a, std = weighted_stat(v)
         action = "add" if c < a else ("remove" if c > a else "ok")
         var_table.append({"Variation": v, "C=": c, "A=": a, "Action": action})
@@ -76,7 +82,7 @@ if user_file and competitor_files and variations:
     st.subheader("Variation Frequency Table")
     st.dataframe(pd.DataFrame(var_table))
 
-    # Structure placement stats
+    # Section tag recommendations
     def section_stats(section):
         values = np.array([comp[1][section] for comp in comp_data])
         if not values.any():
@@ -91,7 +97,7 @@ if user_file and competitor_files and variations:
     rows = []
     for sec in ["h2", "h3", "h4", "p"]:
         mean, std, min_val, max_val = section_stats(sec)
-        current = user_structure[sec]
+        current = user_struct_counts[sec]
         status = "Too few" if current < min_val else ("Too many" if current > max_val else "OK")
         rows.append({"Section": sec.upper(), "Current": current, "Target Min": min_val, "Target Max": max_val, "Action": status})
 
