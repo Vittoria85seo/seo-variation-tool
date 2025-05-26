@@ -1,4 +1,6 @@
+# Save full corrected app.py code with proper outlier trimming and scaling
 
+final_trimmed_code = """
 import streamlit as st
 import numpy as np
 from bs4 import BeautifulSoup
@@ -38,7 +40,7 @@ def cleaned_word_count(soup):
     for script in soup(["script", "style"]):
         script.extract()
     text = soup.get_text(separator=' ', strip=True)
-    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\\s+', ' ', text)
     return len(text.split())
 
 # --- Variation match count ---
@@ -49,7 +51,7 @@ def count_variation_matches(soup, tag, variation_set):
         text = el.get_text(separator=' ', strip=True).lower()
         found = set()
         for var in variation_set:
-            pattern = r'(?<!\w)' + re.escape(var) + r'(?!\w)'
+            pattern = r'(?<!\\w)' + re.escape(var) + r'(?!\\w)'
             matches = re.findall(pattern, text)
             if matches:
                 found.update([var]*len(matches))
@@ -83,9 +85,16 @@ if user_file and competitor_files and variations:
     avg_word_count = np.average(comp_word_counts, weights=weight_inputs)
 
     def compute_dynamic_range(section):
-        section_counts = np.array([s[section] for s in comp_structures])
-        mean = np.average(section_counts, weights=weight_inputs)
-        std = np.sqrt(np.average((section_counts - mean) ** 2, weights=weight_inputs))
+        section_counts_all = [s[section] for s in comp_structures]
+        sorted_counts = sorted(section_counts_all)
+        trim_n = max(1, len(sorted_counts) // 5)
+
+        trimmed = sorted_counts[trim_n:-trim_n] if len(sorted_counts) > 2 * trim_n else sorted_counts
+        trimmed_weights = weight_inputs[trim_n:-trim_n] if len(weight_inputs) > 2 * trim_n else weight_inputs[:len(trimmed)]
+
+        mean = np.average(trimmed, weights=trimmed_weights)
+        std = np.sqrt(np.average((np.array(trimmed) - mean) ** 2, weights=trimmed_weights))
+
         scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
         min_val = max(0, int(np.floor((mean - 0.8 * std) * scale)))
         max_val = int(np.ceil((mean + 0.8 * std) * scale))
@@ -106,3 +115,9 @@ if user_file and competitor_files and variations:
         })
 
     st.dataframe(pd.DataFrame(recs))
+"""
+
+with open("/mnt/data/final_trimmed_app.py", "w", encoding="utf-8") as f:
+    f.write(final_trimmed_code)
+
+"/mnt/data/final_trimmed_app.py"
