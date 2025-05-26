@@ -11,8 +11,13 @@ st.header("1. Upload Your Page and Competitors")
 user_file = st.file_uploader("Upload your HTML file (your page)", type="html", key="user")
 competitor_files = st.file_uploader("Upload 10 competitor HTML files", type="html", accept_multiple_files=True, key="comps")
 
+# --- Competitor URLs ---
+st.header("2. Enter Competitor URLs")
+url_text = st.text_area("Enter one competitor URL per line, in the same order as the uploaded files")
+competitor_urls = [line.strip() for line in url_text.split("\n") if line.strip()]
+
 # --- Variation input ---
-st.header("2. Enter Variation Terms")
+st.header("3. Enter Variation Terms")
 variations_text = st.text_area("Enter comma-separated variation phrases (e.g. fleecejacka herr, fleecetröja)")
 variations = [v.strip().lower() for v in variations_text.split(",") if v.strip()] if variations_text else []
 variation_parts = set()
@@ -21,7 +26,7 @@ for v in variations:
 variation_parts.update(variations)
 
 # --- Weighting ---
-st.header("3. Competitor Weighting")
+st.header("4. Competitor Weighting")
 def default_weights(n):
     return [round(1.5 - i*0.1, 2) for i in range(n)]
 
@@ -99,7 +104,7 @@ if user_file and competitor_files and variations:
         return int(np.floor(p10 * scale)), int(np.ceil(p90 * scale))
 
     # --- Output ---
-    st.header("4. Tag Placement Recommendations")
+    st.header("5. Tag Placement Recommendations")
     recs = []
     for sec in ["h2", "h3", "h4", "p"]:
         min_val, max_val = compute_section_range(sec)
