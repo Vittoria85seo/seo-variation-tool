@@ -41,22 +41,19 @@ def cleaned_word_count(soup):
     text = re.sub(r'\s+', ' ', text)
     return len(text.split())
 
-# --- Variation match count ---
+# --- Variation match logic: once per variation per tag ---
 def count_variation_matches(soup, tag, variation_set):
     tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p", "li"])
     count = 0
     for el in tags:
         text = el.get_text(separator=' ', strip=True).lower()
-        found = set()
         for var in variation_set:
             pattern = r'(?<!\w)' + re.escape(var) + r'(?!\w)'
-            matches = re.findall(pattern, text)
-            if matches:
-                found.update([var]*len(matches))
-        count += len(found)
+            if re.search(pattern, text):
+                count += 1
     return count
 
-# --- Extract data ---
+# --- Extraction function ---
 def extract_word_count_and_sections(file):
     content = file.read()
     soup = BeautifulSoup(content, "html.parser")
