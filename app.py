@@ -29,76 +29,54 @@ else:
     weight_inputs = []
 
 # --- Extraction Function ---
-def extract_variation_counts(file, variations):
+def extract_word_count_and_sections(file):
     content = file.read()
     soup = BeautifulSoup(content, "html.parser")
-    counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
-
-    for tag in ["h2", "h3", "h4"]:
-        for el in soup.find_all(tag):
-            txt = el.get_text(separator=' ', strip=True).lower()
-            counts[tag] += sum(txt.count(v) for v in variations)
-
-    # Combine <p> and <li> as paragraph sources, without duplicates
-    para_texts = set(
-        el.get_text(separator=' ', strip=True).lower()
-        for el in soup.find_all(["p", "li"])
-        if el.get_text(strip=True)
-    )
-    counts["p"] = sum(
-        sum(text.count(v) for v in variations)
-        for text in para_texts
-    )
-
-    full_text = " ".join(para_texts)
-    token_list = full_text.split()
-    variation_counts = {v: token_list.count(v) for v in variations}
-
-    return variation_counts, counts
+    word_count = len(soup.get_text(separator=' ', strip=True).split())
+    structure = {
+        "h2": len(soup.find_all("h2")),
+        "h3": len(soup.find_all("h3")),
+        "h4": len(soup.find_all("h4")),
+        "p": len(set(
+            el.get_text(separator=' ', strip=True).lower()
+            for el in soup.find_all(["p", "li"])
+            if el.get_text(strip=True)
+        ))
+    }
+    return word_count, structure, content
 
 # --- Main Processing ---
 if user_file and competitor_files and variations:
-    user_var_counts, user_struct_counts = extract_variation_counts(user_file, variations)
+    user_word_count, user_structure, user_content = extract_word_count_and_sections(user_file)
 
-    comp_data = []
+    comp_word_counts = []
+    comp_structures = []
     for comp_file in competitor_files:
-        var_counts, struct_counts = extract_variation_counts(comp_file, variations)
-        comp_data.append((var_counts, struct_counts))
+        wc, struct, _ = extract_word_count_and_sections(comp_file)
+        comp_word_counts.append(wc)
+        comp_structures.append(struct)
 
-    # Weighted variation stats
-    def weighted_stat(v):
-        vals = np.array([comp[0][v] for comp in comp_data])
-        mean = np.average(vals, weights=weight_inputs)
-        std = np.sqrt(np.average((vals - mean) ** 2, weights=weight_inputs))
-        return round(mean, 2), round(std, 2)
+    # Compute average word count across competitors
+    avg_word_count = np.average(comp_word_counts, weights=weight_inputs)
 
-    var_table = []
-    for v in variations:
-        c = user_var_counts[v]
-        a, std = weighted_stat(v)
-        action = "add" if c < a else ("remove" if c > a else "ok")
-        var_table.append({"Variation": v, "C=": c, "A=": a, "Action": action})
+    # Compute per-section average tag count and std dev, weighted
+    def compute_section_ranges(section):
+        tag_counts = np.array([s[section] for s in comp_structures])
+        mean_count = np.average(tag_counts, weights=weight_inputs)
+        std_count = np.sqrt(np.average((tag_counts - mean_count) ** 2, weights=weight_inputs))
 
-    st.subheader("Variation Frequency Table")
-    st.dataframe(pd.DataFrame(var_table))
+        # Adjust expected tag count range to user word count relative to avg competitor word count
+        scaling_factor = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
+        min_val = max(0, int(np.floor((mean_count - 0.8 * std_count) * scaling_factor)))
+        max_val = int(np.ceil((mean_count + 0.8 * std_count) * scaling_factor))
+        return min_val, max_val
 
-    # Section tag recommendations
-    def section_stats(section):
-        values = np.array([comp[1][section] for comp in comp_data])
-        if not values.any():
-            return 0, 0.0, 0, 0
-        mean = np.average(values, weights=weight_inputs)
-        std = np.sqrt(np.average((values - mean) ** 2, weights=weight_inputs))
-        min_t = max(0, int(np.floor(mean - 0.8 * std)))
-        max_t = int(np.ceil(mean + 0.8 * std))
-        return int(mean), round(std, 2), min_t, max_t
-
-    st.subheader("Tag Placement Recommendations")
-    rows = []
+    st.subheader("Tag Placement Recommendations (Word-Scaled by Competitor Avg)")
+    recs = []
     for sec in ["h2", "h3", "h4", "p"]:
-        mean, std, min_val, max_val = section_stats(sec)
-        current = user_struct_counts[sec]
+        min_val, max_val = compute_section_ranges(sec)
+        current = user_structure[sec]
         status = "Too few" if current < min_val else ("Too many" if current > max_val else "OK")
-        rows.append({"Section": sec.upper(), "Current": current, "Target Min": min_val, "Target Max": max_val, "Action": status})
+        recs.append({"Section": sec.upper(), "Current": current, "Target Min": min_val, "Target Max": max_val, "Action": status})
 
-    st.dataframe(pd.DataFrame(rows))
+    st.dataframe(pd.DataFrame(recs))
