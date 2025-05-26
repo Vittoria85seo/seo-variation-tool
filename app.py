@@ -30,7 +30,8 @@ else:
 
 # --- Extraction Function ---
 def extract_sections(file):
-    soup = BeautifulSoup(file.read(), "html.parser")
+    content = file.read()
+    soup = BeautifulSoup(content, "html.parser")
     text_tokens = []
     for tag in ["h2", "h3", "h4", "p", "li"]:
         elements = soup.find_all(tag)
@@ -43,17 +44,17 @@ def extract_sections(file):
             el.get_text(separator=' ', strip=True).lower()
             for el in soup.find_all(["p", "li"])
         ))
-    }
+    }, content  # Also return raw content for later reuse
 
 # --- Main Processing ---
 if user_file and competitor_files and variations:
-    user_text, user_structure = extract_sections(user_file)
+    user_text, user_structure, user_raw = extract_sections(user_file)
     user_tokens = user_text.split()
     user_counts = {v: sum(1 for t in user_tokens if t == v) for v in variations}
 
     comp_data = []
     for comp_file in competitor_files:
-        comp_text, structure = extract_sections(comp_file)
+        comp_text, structure, _ = extract_sections(comp_file)
         tokens = comp_text.split()
         counts = {v: sum(1 for t in tokens if t == v) for v in variations}
         comp_data.append((counts, structure))
@@ -78,6 +79,8 @@ if user_file and competitor_files and variations:
     # Structure placement stats
     def section_stats(section):
         values = np.array([comp[1][section] for comp in comp_data])
+        if not values.any():
+            return 0, 0.0, 0, 0
         mean = np.average(values, weights=weight_inputs)
         std = np.sqrt(np.average((values - mean) ** 2, weights=weight_inputs))
         min_t = max(0, int(np.floor(mean - 0.8 * std)))
