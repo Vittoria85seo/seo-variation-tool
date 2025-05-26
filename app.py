@@ -76,7 +76,7 @@ if user_file and competitor_files and variations:
 
     avg_word_count = np.average(comp_word_counts, weights=weight_inputs)
 
-        def compute_dynamic_range(section):
+def compute_dynamic_range(section):
         section_counts_all = [s[section] for s in comp_structures]
         sorted_counts = sorted(section_counts_all)
         trim_n = max(1, len(sorted_counts) // 5)
