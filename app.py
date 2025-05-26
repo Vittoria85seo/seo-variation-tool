@@ -17,11 +17,7 @@ competitor_files = st.file_uploader("Upload competitor HTML files (10 max)", typ
 st.header("2. Enter Variations List")
 variations_text = st.text_area("Enter comma-separated variations")
 variations = [v.strip().lower() for v in variations_text.split(",") if v.strip()] if variations_text else []
-variation_parts = set()
-for v in variations:
-    parts = v.split()
-    variation_parts.update(parts)
-variation_parts.update(variations)
+variation_parts = set(variations)
 
 # --- Weighting ---
 st.header("3. Adjust Competitor Weighting (Top to Bottom Rank)")
