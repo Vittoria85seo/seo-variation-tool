@@ -76,21 +76,24 @@ if user_file and competitor_files and variations:
 
     avg_word_count = np.average(comp_word_counts, weights=weight_inputs)
 
- def compute_dynamic_range(section):
-    section_counts_all = [s[section] for s in comp_structures]
-    sorted_counts = sorted(section_counts_all)
-    trim_n = max(1, len(sorted_counts) // 5)
+        def compute_dynamic_range(section):
+        section_counts_all = [s[section] for s in comp_structures]
+        sorted_counts = sorted(section_counts_all)
+        trim_n = max(1, len(sorted_counts) // 5)
 
-    trimmed = sorted_counts[trim_n:-trim_n] if len(sorted_counts) > 2 * trim_n else sorted_counts
-    trimmed_weights = weight_inputs[trim_n:-trim_n] if len(weight_inputs) > 2 * trim_n else weight_inputs[:len(trimmed)]
+        # Trim the counts and weights
+        trimmed = sorted_counts[trim_n:-trim_n] if len(sorted_counts) > 2 * trim_n else sorted_counts
+        trimmed_weights = weight_inputs[trim_n:-trim_n] if len(weight_inputs) > 2 * trim_n else weight_inputs[:len(trimmed)]
 
-    mean = np.average(trimmed, weights=trimmed_weights)
-    std = np.sqrt(np.average((np.array(trimmed) - mean) ** 2, weights=trimmed_weights))
+        # Compute weighted mean and std dev from trimmed values
+        mean = np.average(trimmed, weights=trimmed_weights)
+        std = np.sqrt(np.average((np.array(trimmed) - mean) ** 2, weights=trimmed_weights))
 
-    scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
-    min_val = max(0, int(np.floor((mean - 0.8 * std) * scale)))
-    max_val = int(np.ceil((mean + 0.8 * std) * scale))
-    return min_val, max_val
+        # Scale based on user vs competitor avg word count
+        scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
+        min_val = max(0, int(np.floor((mean - 0.8 * std) * scale)))
+        max_val = int(np.ceil((mean + 0.8 * std) * scale)))
+        return min_val, max_val
 
     st.subheader("Tag Placement Recommendations (Dynamic Math-Based)")
     recs = []
