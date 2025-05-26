@@ -44,20 +44,24 @@ def cleaned_word_count(soup):
     text = re.sub(r'\s+', ' ', text)
     return len(text.split())
 
-# --- Count logic: distinct matches per tag, overlap allowed ---
-def count_distinct_variations_per_tag(soup, tag, variation_set):
-    tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p", "li"])
-    count = 0
-    sorted_vars = sorted(variation_set, key=lambda x: -len(x))
+# --- Count logic: each variation counts once per tag, even if overlapping ---
+def count_variations_accurately(soup, tag, variation_list):
+    tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p"])
+    total = 0
+    sorted_vars = sorted(variation_list, key=lambda x: -len(x))
     for el in tags:
         text = el.get_text(separator=' ', strip=True).lower()
-        found = set()
+        used_spans = []
         for var in sorted_vars:
-            pattern = r'(?<!\w)' + re.escape(var) + r'(?!\w)'
-            if re.search(pattern, text):
-                found.add(var)
-        count += len(found)
-    return count
+            pattern = re.compile(r'(?<!\w)' + re.escape(var) + r'(?!\w)')
+            for match in pattern.finditer(text):
+                span = match.span()
+                if any(s <= span[0] < e or s < span[1] <= e for s, e in used_spans):
+                    continue
+                used_spans.append(span)
+                total += 1
+                break
+    return total
 
 # --- Extract info from file ---
 def extract_word_count_and_sections(file):
@@ -65,10 +69,10 @@ def extract_word_count_and_sections(file):
     soup = BeautifulSoup(content, "html.parser")
     word_count = cleaned_word_count(soup)
     structure = {
-        "h2": count_distinct_variations_per_tag(soup, "h2", variation_parts),
-        "h3": count_distinct_variations_per_tag(soup, "h3", variation_parts),
-        "h4": count_distinct_variations_per_tag(soup, "h4", variation_parts),
-        "p": count_distinct_variations_per_tag(soup, "p", variation_parts)
+        "h2": count_variations_accurately(soup, "h2", list(variation_parts)),
+        "h3": count_variations_accurately(soup, "h3", list(variation_parts)),
+        "h4": count_variations_accurately(soup, "h4", list(variation_parts)),
+        "p": count_variations_accurately(soup, "p", list(variation_parts))
     }
     return word_count, structure
 
