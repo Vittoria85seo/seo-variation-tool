@@ -91,8 +91,8 @@ def compute_dynamic_range(section):
 
         # Scale based on user vs competitor avg word count
         scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
-        min_val = max(0, int(np.floor((mean - 0.8 * std) * scale)))
-        max_val = int(np.ceil((mean + 0.8 * std) * scale)))
+        min_val = max(0, int(np.floor((mean - 0.8 * std) * scale))
+        max_val = int(np.ceil((mean + 0.8 * std) * scale))
         return min_val, max_val
 
     st.subheader("Tag Placement Recommendations (Dynamic Math-Based)")
