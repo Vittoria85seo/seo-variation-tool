@@ -2,31 +2,25 @@ import streamlit as st
 from bs4 import BeautifulSoup
 import re
 import numpy as np
-import io
 
-st.set_page_config(page_title="SEO Variation Analyzer", layout="wide")
-st.title("SEO Variation Analyzer (Standardized Math)")
+st.set_page_config(page_title="SEO Variation Analyzer", layout="centered")
+st.title("SEO Variation Analyzer")
 
-# Step 1 – Upload your HTML
-st.header("1. Upload Your Page and Competitors")
+# Upload inputs
 user_url = st.text_input("Your Page URL")
-user_file = st.file_uploader("Upload your HTML file (your page)", type="html", key="user")
+user_file = st.file_uploader("Upload your HTML file", type="html", key="user")
 
-st.markdown("### Competitors (URL and HTML Upload)")
+st.markdown("**Top 10 Competitors**")
 comp_urls = []
 comp_files = []
 for i in range(10):
-    col1, col2 = st.columns([2, 2])
-    with col1:
-        url = st.text_input(f"Competitor {i+1} URL", key=f"url_{i}")
-    with col2:
-        file = st.file_uploader(f"Competitor {i+1} HTML", type="html", key=f"html_{i}")
+    url = st.text_input(f"Competitor {i+1} URL", key=f"url_{i}")
+    file = st.file_uploader("", type="html", key=f"html_{i}")
     if url and file:
         comp_urls.append(url)
         comp_files.append(file)
 
-# Step 2 – Enter variation terms
-st.header("2. Enter Variation Terms")
+# Variations
 raw_variations = st.text_area("Enter comma-separated variation phrases")
 variations = set(v.strip().lower() for v in raw_variations.split(",") if v.strip())
 
@@ -34,7 +28,6 @@ P_TAGS = {"p", "li"}
 HEADINGS = {"h2", "h3", "h4"}
 ALL_TAGS = ["h2", "h3", "h4", "p"]
 
-# Helpers
 def is_valid(tag):
     parent = tag.find_parent()
     while parent:
@@ -43,7 +36,7 @@ def is_valid(tag):
         parent = parent.find_parent()
     return True
 
-def get_text_content(tag):
+def get_text(tag):
     return tag.get_text(separator=" ", strip=True).lower()
 
 def count_words(soup):
@@ -56,27 +49,25 @@ def analyze_file(file):
     soup = BeautifulSoup(file.read(), "html.parser")
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     for tag in soup.find_all(True):
-        tag_name = tag.name.lower()
-        if tag_name in HEADINGS or tag_name in P_TAGS:
+        name = tag.name.lower()
+        if name in HEADINGS or name in P_TAGS:
             if not is_valid(tag):
                 continue
-            text = get_text_content(tag)
+            text = get_text(tag)
             matched = set()
             for variation in variations:
-                if re.search(rf"(?<!\\w){re.escape(variation)}(?!\\w)", text):
+                if re.search(rf"(?<!\w){re.escape(variation)}(?!\w)", text):
                     matched.add(variation)
             if matched:
-                if tag_name in P_TAGS:
+                if name in P_TAGS:
                     counts["p"] += len(matched)
                 else:
-                    counts[tag_name] += len(matched)
+                    counts[name] += len(matched)
     wc = count_words(soup)
     return counts, wc
 
-# Step 3 – Run analysis
 if user_file and comp_files and variations:
     user_counts, user_wc = analyze_file(user_file)
-
     comp_data = []
     comp_wordcounts = []
     for f in comp_files:
@@ -90,14 +81,13 @@ if user_file and comp_files and variations:
     wc_avg = np.average(comp_wordcounts, weights=weights)
     ratio = user_wc / wc_avg
 
-    st.header("3. Results")
+    st.subheader("Results")
     for tag in ALL_TAGS:
         values = np.array(df[tag])
         avg = np.average(values, weights=weights)
         std = np.sqrt(np.average((values - avg) ** 2, weights=weights))
         min_val = round((avg - std) * ratio)
         max_val = round((avg + std) * ratio)
-
         current = user_counts[tag]
         if current < min_val:
             status = "Add"
@@ -105,5 +95,4 @@ if user_file and comp_files and variations:
             status = "Reduce"
         else:
             status = "OK"
-
-        st.write(f"**{tag.upper()}** — Yours: {current} | Range: {min_val}-{max_val} → {status}")
+        st.markdown(f"**{tag.upper()}**: {current} | Range: {min_val}-{max_val} → {status}")
