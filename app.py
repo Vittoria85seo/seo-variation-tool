@@ -5,46 +5,48 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import re
 
-st.title("SEO Variation Analyzer")
+st.title("SEO Variation & Structure Analyzer")
 
-# --- Upload user file ---
+# --- Your Page ---
 st.header("1. Your Page")
-user_url = st.text_input("Your Page URL")
-user_file = st.file_uploader("Upload your HTML file", type="html", key="user")
+user_url = st.text_input("Your page URL")
+user_file = st.file_uploader("Upload your HTML file (your page)", type="html", key="user")
 
-# --- Competitor section ---
+# --- Competitor URLs and Files ---
 st.header("2. Competitors")
-st.markdown("Upload each competitor file with its URL in order")
+comp_url_text = st.text_area("Enter 10 competitor URLs, one per line")
+comp_urls = [line.strip() for line in comp_url_text.split("\n") if line.strip()]
 
-comp_urls = []
 comp_files = []
 for i in range(10):
-    url = st.text_input(f"Competitor {i+1} URL", key=f"url_{i}")
-    file = st.file_uploader(f"Upload HTML for Competitor {i+1}", type="html", key=f"file_{i}")
-    if url and file:
-        comp_urls.append(url)
-        comp_files.append(file)
+    label = f"Upload HTML for Competitor {i+1} ({comp_urls[i] if i < len(comp_urls) else 'URL missing'})"
+    uploaded = st.file_uploader(label, type="html", key=f"comp_{i}")
+    comp_files.append(uploaded)
 
 # --- Variations ---
 st.header("3. Variation Terms")
-variations_text = st.text_area("Enter comma-separated variation phrases")
-variations = [v.strip().lower() for v in variations_text.split(",") if v.strip()]
+variations_text = st.text_area("Enter comma-separated variation phrases (e.g. fleecejacka herr, fleecetröja)")
+variations = [v.strip().lower() for v in variations_text.split(",") if v.strip()] if variations_text else []
 variation_parts = set()
 for v in variations:
     variation_parts.update(v.split())
 variation_parts.update(variations)
 
-# --- Count logic ---
-def count_variations(soup, tag, variation_list):
-    if tag == "p":
-        tags = soup.find_all(["p", "li"])
-    else:
-        tags = soup.find_all(tag)
+# --- Word Count ---
+def cleaned_word_count(soup):
+    for script in soup(["script", "style"]):
+        script.extract()
+    text = soup.get_text(separator=' ', strip=True)
+    text = re.sub(r'\s+', ' ', text)
+    return len(text.split())
+
+# --- Accurate Count Function ---
+def count_variations_per_tag(soup, tag, variation_list):
+    tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p", "li"])
     total = 0
     sorted_vars = sorted(variation_list, key=lambda x: -len(x))
     for el in tags:
         text = el.get_text(separator=' ', strip=True).lower()
-        found = set()
         used_spans = []
         for var in sorted_vars:
             pattern = re.compile(r'(?<!\w)' + re.escape(var) + r'(?!\w)')
@@ -53,65 +55,66 @@ def count_variations(soup, tag, variation_list):
                 if any(s <= span[0] < e or s < span[1] <= e for s, e in used_spans):
                     continue
                 used_spans.append(span)
-                found.add(var)
+                total += 1
                 break
-        total += len(found)
     return total
 
-def word_count(soup):
-    for script in soup(["script", "style"]): script.extract()
-    text = soup.get_text(separator=' ', strip=True)
-    return len(re.sub(r'\s+', ' ', text).split())
-
-# --- Processing ---
-def process_file(file, variation_parts):
+# --- Extract Tag Data ---
+def extract_structure(file, variation_list):
     soup = BeautifulSoup(file.read(), "html.parser")
-    return {
-        "word_count": word_count(soup),
-        "h2": count_variations(soup, "h2", variation_parts),
-        "h3": count_variations(soup, "h3", variation_parts),
-        "h4": count_variations(soup, "h4", variation_parts),
-        "p": count_variations(soup, "p", variation_parts)
+    wc = cleaned_word_count(soup)
+    data = {
+        "h2": count_variations_per_tag(soup, "h2", variation_list),
+        "h3": count_variations_per_tag(soup, "h3", variation_list),
+        "h4": count_variations_per_tag(soup, "h4", variation_list),
+        "p": count_variations_per_tag(soup, "p", variation_list),
+        "word_count": wc
     }
+    return data
 
-# --- Analyze and show ---
-if user_file and comp_files and variations:
-    st.header("4. Analysis")
+# --- Analysis ---
+if user_file and all(comp_files) and variations:
+    user_data = extract_structure(user_file, list(variation_parts))
+    comp_data = [extract_structure(f, list(variation_parts)) for f in comp_files]
 
-    user_data = process_file(user_file, variation_parts)
-    comp_data = [process_file(f, variation_parts) for f in comp_files]
+    comp_df = pd.DataFrame(comp_data)
+    avg_wc = comp_df["word_count"].mean()
+    scale = user_data["word_count"] / avg_wc if avg_wc > 0 else 1.0
 
-    avg_wc = np.mean([c["word_count"] for c in comp_data])
-    scale = user_data["word_count"] / avg_wc if avg_wc else 1.0
+    st.header("4. Tag Placement Recommendations")
 
-    def compute_range(values, section, scale):
-        values_sorted = sorted(values)
+    def compute_range(values, section):
+        values = sorted(values)
         if section == "p":
-            trimmed = values_sorted[1:-1] if len(values_sorted) > 4 else values_sorted
+            trimmed = values[1:-1] if len(values) > 4 else values
+            p10 = np.percentile(trimmed, 10)
+            p90 = np.percentile(trimmed, 90)
         elif section == "h3":
-            capped = [min(v, 20) for v in values_sorted]
+            capped = [min(v, 20) for v in values]
             trimmed = capped[:-1] if len(capped) > 4 else capped
+            p10 = np.percentile(trimmed, 10)
+            p90 = np.percentile(trimmed, 90)
         elif section == "h2":
-            trimmed = values_sorted[:-1] if len(values_sorted) > 4 else values_sorted
+            trimmed = values[:-1] if len(values) > 4 else values
+            p10 = np.percentile(trimmed, 10)
+            p90 = np.percentile(trimmed, 90)
         else:
-            trimmed = values_sorted
-        p10 = np.percentile(trimmed, 10)
-        p90 = np.percentile(trimmed, 90)
+            p10 = np.percentile(values, 10)
+            p90 = np.percentile(values, 90)
         return int(np.floor(p10 * scale)), int(np.ceil(p90 * scale))
 
-    final_table = []
-    for sec in ["h2", "h3", "h4", "p"]:
-        values = [c[sec] for c in comp_data]
-        min_v, max_v = compute_range(values, sec, scale)
-        current = user_data[sec]
-        status = "✅" if min_v <= current <= max_v else ("⬆️ too high" if current > max_v else "⬇️ too low")
-        final_table.append({
-            "Tag": sec.upper(),
-            "Your Count": current,
-            "Recommended Min": min_v,
-            "Recommended Max": max_v,
+    rows = []
+    for section in ["h2", "h3", "h4", "p"]:
+        values = comp_df[section].tolist()
+        min_r, max_r = compute_range(values, section)
+        user_val = user_data[section]
+        status = "Too few" if user_val < min_r else ("Too many" if user_val > max_r else "OK")
+        rows.append({
+            "Tag": section.upper(),
+            "Your Count": user_val,
+            "Recommended Min": min_r,
+            "Recommended Max": max_r,
             "Status": status
         })
 
-    st.subheader("Tag Recommendations")
-    st.dataframe(pd.DataFrame(final_table))
+    st.dataframe(pd.DataFrame(rows))
