@@ -62,7 +62,7 @@ def count_words(soup):
 def analyze_file(file):
     try:
         file.seek(0)
-    except:
+    except Exception:
         pass
     try:
         raw = file.read()
@@ -72,3 +72,46 @@ def analyze_file(file):
             decoded = raw.decode("latin1")
         soup = BeautifulSoup(decoded, "html.parser")
     except Exception as e:
+        st.error(f"Failed to parse HTML: {e}")
+        return {"h2": 0, "h3": 0, "h4": 0, "p": 0}, 0, {"h2": [], "h3": [], "h4": [], "p": []}
+
+    counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
+    matches_per_tag = {"h2": [], "h3": [], "h4": [], "p": []}
+    tag_debug_list = []
+    try:
+        for tag in soup.find_all(True):
+            name = tag.name.lower()
+            if name in HEADINGS or name in P_TAGS:
+                if not is_valid(tag):
+                    continue
+                text = get_text(tag)
+                count = 0
+                used_spans = []
+                found = []
+                for pattern in variation_patterns:
+                    for m in pattern.finditer(text):
+                        span = m.span()
+                        if any(s <= span[0] < e or s < span[1] <= e for s, e in used_spans):
+                            continue
+                        used_spans.append(span)
+                        count += 1
+                        found.append(m.group())
+                tag_debug_list.append((name, text))
+                if count:
+                    tag_key = "p" if name in P_TAGS else name
+                    counts[tag_key] += count
+                    matches_per_tag[tag_key].extend(found)
+    except Exception as e:
+        st.error(f"Failed during tag processing: {e}")
+
+    try:
+        wc = count_words(soup)
+    except Exception as e:
+        st.error(f"Failed to count words: {e}")
+        wc = 0
+
+    if tag_debug_list:
+        st.subheader("First 10 visible tags from parsed HTML")
+        st.json(tag_debug_list[:10])
+
+    return counts, wc, matches_per_tag
