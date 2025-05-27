@@ -1,3 +1,4 @@
+
 import streamlit as st
 import numpy as np
 from bs4 import BeautifulSoup
@@ -44,18 +45,19 @@ def cleaned_word_count(soup):
     text = re.sub(r'\s+', ' ', text)
     return len(text.split())
 
-# --- Count logic: count all variation matches per tag, allowing overlap ---
-def count_variations_overlap(soup, tag, variation_list):
+# --- Variation matching logic: overlapping allowed, each variation once per tag ---
+def count_variations_per_tag(soup, tag, variation_list):
     tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p"])
-    total = 0
+    count = 0
     sorted_vars = sorted(variation_list, key=lambda x: -len(x))
     for el in tags:
         text = el.get_text(separator=' ', strip=True).lower()
+        found = set()
         for var in sorted_vars:
-            pattern = re.compile(r'(?<!\w)' + re.escape(var) + r'(?!\w)')
-            if re.search(pattern, text):
-                total += 1
-    return total
+            if re.search(r'(?<!\w)' + re.escape(var) + r'(?!\w)', text):
+                found.add(var)
+        count += len(found)
+    return count
 
 # --- Extract info from file ---
 def extract_word_count_and_sections(file):
@@ -63,10 +65,10 @@ def extract_word_count_and_sections(file):
     soup = BeautifulSoup(content, "html.parser")
     word_count = cleaned_word_count(soup)
     structure = {
-        "h2": count_variations_overlap(soup, "h2", list(variation_parts)),
-        "h3": count_variations_overlap(soup, "h3", list(variation_parts)),
-        "h4": count_variations_overlap(soup, "h4", list(variation_parts)),
-        "p": count_variations_overlap(soup, "p", list(variation_parts))
+        "h2": count_variations_per_tag(soup, "h2", list(variation_parts)),
+        "h3": count_variations_per_tag(soup, "h3", list(variation_parts)),
+        "h4": count_variations_per_tag(soup, "h4", list(variation_parts)),
+        "p": count_variations_per_tag(soup, "p", list(variation_parts))
     }
     return word_count, structure
 
@@ -85,17 +87,17 @@ if user_file and competitor_files and variations:
 
     def compute_section_range(section):
         counts = [s[section] for s in comp_structures]
-        counts_sorted = sorted(counts)
 
+        # Outlier handling
         if section == "p":
-            trimmed = counts_sorted[1:-1] if len(counts_sorted) > 4 else counts_sorted
+            trimmed = sorted(counts)[1:-1] if len(counts) > 4 else counts
         elif section == "h3":
-            capped = [min(v, 20) for v in counts_sorted]
-            trimmed = capped[:-1] if len(capped) > 4 else capped
+            capped = [min(v, 20) for v in counts]
+            trimmed = sorted(capped)[1:-1] if len(capped) > 4 else capped
         elif section == "h2":
-            trimmed = counts_sorted[:-1] if len(counts_sorted) > 4 else counts_sorted
+            trimmed = sorted(counts)[1:-1] if len(counts) > 4 else counts
         else:
-            trimmed = counts_sorted
+            trimmed = counts
 
         p10 = np.percentile(trimmed, 10)
         p90 = np.percentile(trimmed, 90)
