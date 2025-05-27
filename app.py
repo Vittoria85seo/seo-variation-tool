@@ -1,118 +1,103 @@
-
 import streamlit as st
 import numpy as np
 import pandas as pd
 import re
 from bs4 import BeautifulSoup
 
-st.title("SEO Variation Analyzer")
+st.title("SEO Variation & Structure Analyzer")
 
-# --- Section 1: Upload User Page ---
+# --- Upload and Input Section ---
 st.header("1. Upload Your Page")
-user_url = st.text_input("Your Page URL")
-user_file = st.file_uploader("Upload your page HTML", type="html", key="user")
+user_file = st.file_uploader("Upload your HTML file (your page)", type="html", key="user")
 
-# --- Section 2: Competitor Setup ---
-st.header("2. Competitor Setup")
-st.markdown("Enter 10 competitor URLs (in order):")
-url_text = st.text_area("One URL per line", height=180)
-competitor_urls = [line.strip() for line in url_text.splitlines() if line.strip()]
-competitor_files = []
-if len(competitor_urls) > 0:
-    st.markdown("Upload HTML for each competitor (in the same order):")
-    for i, url in enumerate(competitor_urls):
-        f = st.file_uploader(f"HTML for Competitor {i+1}: {url}", type="html", key=f"comp_{i}")
-        competitor_files.append(f)
+st.header("2. Your Page URL")
+user_url = st.text_input("Enter the URL of your page")
 
-# --- Section 3: Variation Terms ---
 st.header("3. Enter Variation Terms")
-variation_input = st.text_area("Comma-separated variations", placeholder="e.g. fleecejacka herr, fleecejacka, herr")
-variations = [v.strip().lower() for v in variation_input.split(",") if v.strip()]
+variations_text = st.text_area("Comma-separated variations (e.g. fleecejacka herr, fleecetröja)")
+variations = [v.strip().lower() for v in variations_text.split(",") if v.strip()]
 variation_parts = set()
 for v in variations:
     variation_parts.update(v.split())
 variation_parts.update(variations)
-sorted_variations = sorted(variation_parts, key=len, reverse=True)
 
-# --- Weight Calculation ---
-def get_weights(n):
-    w = [1.5 - i * 0.1 for i in range(n)]
-    total = sum(w)
-    return [x / total for x in w]
+st.header("4. Upload Competitor Data")
+competitor_urls_text = st.text_area("Enter 10 competitor URLs, one per line")
+competitor_urls = [line.strip() for line in competitor_urls_text.split("
+") if line.strip()]
+competitor_files = []
+for i, url in enumerate(competitor_urls):
+    competitor_files.append(st.file_uploader(f"Upload HTML for Competitor {i+1}: {url}", type="html", key=f"comp_{i}"))
 
-# --- Word Count ---
-def word_count(soup):
-    for tag in soup(["script", "style"]):
-        tag.decompose()
-    text = soup.get_text(separator=" ", strip=True)
-    text = re.sub(r"\s+", " ", text)
-    return len(text.split())
+# --- Utility Functions ---
+def cleaned_word_count(soup):
+    for script in soup(["script", "style"]):
+        script.extract()
+    text = soup.get_text(separator=' ', strip=True)
+    return len(re.sub(r'\s+', ' ', text).split())
 
-# --- Variation Count Logic ---
-def count_variations_by_tag(soup, tags, patterns, variations):
+def count_variations_strict(soup, tag, variation_list):
+    tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p", "li"])
     total = 0
-    for tag in tags:
-        for el in soup.find_all(tag):
-            if tag in ["p", "li"] and (el.get("class") or el.get("id")):
-                continue
-            text = el.get_text(separator=' ', strip=True).lower()
-            found = set()
-            for pattern, var in zip(patterns, variations):
-                if pattern.search(text):
-                    found.add(var)
-            total += len(found)
+    sorted_vars = sorted(variation_list, key=lambda x: -len(x))
+    for el in tags:
+        text = el.get_text(separator=' ', strip=True).lower()
+        found = set()
+        for var in sorted_vars:
+            pattern = re.compile(r'(?<!\w)' + re.escape(var) + r'(?!\w)')
+            if pattern.search(text):
+                found.add(var)
+        total += len(found)
     return total
 
-# --- Parse File ---
-def parse_html(file, patterns, variations):
+def extract_counts(file, variation_list):
     content = file.read()
     soup = BeautifulSoup(content, "html.parser")
-    wc = word_count(soup)
+    wc = cleaned_word_count(soup)
     return {
         "word_count": wc,
-        "h2": count_variations_by_tag(soup, ["h2"], patterns, variations),
-        "h3": count_variations_by_tag(soup, ["h3"], patterns, variations),
-        "h4": count_variations_by_tag(soup, ["h4"], patterns, variations),
-        "p": count_variations_by_tag(soup, ["p", "li"], patterns, variations)
+        "h2": count_variations_strict(soup, "h2", variation_list),
+        "h3": count_variations_strict(soup, "h3", variation_list),
+        "h4": count_variations_strict(soup, "h4", variation_list),
+        "p": count_variations_strict(soup, "p", variation_list),
     }
 
-# --- Section 4: Output ---
-if user_file and all(competitor_files) and variations:
-    patterns = [re.compile(r'(?<!\w)' + re.escape(v) + r'(?!\w)', re.IGNORECASE) for v in sorted_variations]
-    user_data = parse_html(user_file, patterns, sorted_variations)
+# --- Analysis ---
+if user_file and variations and len(competitor_files) == 10:
+    user_data = extract_counts(user_file, list(variation_parts))
+    comp_data = [extract_counts(f, list(variation_parts)) for f in competitor_files]
+    avg_word_count = np.mean([c["word_count"] for c in comp_data])
+    scale = user_data["word_count"] / avg_word_count if avg_word_count else 1.0
 
-    comp_data = [parse_html(f, patterns, sorted_variations) for f in competitor_files]
-    weights = get_weights(len(comp_data))
-    avg_word_count = np.average([c["word_count"] for c in comp_data], weights=weights)
-    scale = user_data["word_count"] / avg_word_count if avg_word_count else 1
+    weights = np.array([1.5 - 0.1*i for i in range(10)])
+    weights /= weights.sum()
 
     def compute_range(section):
-        values = [c[section] for c in comp_data]
-        trimmed = sorted(values)
-        if section == "p" and len(trimmed) > 4:
-            trimmed = trimmed[1:-1]
-        elif section == "h3":
-            trimmed = [min(v, 20) for v in trimmed]
-            if len(trimmed) > 4:
-                trimmed = trimmed[:-1]
-        elif section == "h2":
-            if len(trimmed) > 4:
-                trimmed = trimmed[:-1]
-        p10 = np.percentile(trimmed, 10)
-        p90 = np.percentile(trimmed, 90)
-        return int(np.floor(p10 * scale)), int(np.ceil(p90 * scale))
+        raw = np.array([c[section] for c in comp_data])
+        if section == "p":
+            trimmed = sorted(raw)[1:-1]
+        elif section in ["h2", "h3"]:
+            trimmed = sorted(np.minimum(raw, 20))[:-1]
+        else:
+            trimmed = raw
+        avg = np.average(trimmed, weights=weights[:len(trimmed)])
+        std = np.sqrt(np.average((trimmed - avg)**2, weights=weights[:len(trimmed)]))
+        min_val = max(0, int(np.floor((avg - 0.5 * std) * scale)))
+        max_val = int(np.ceil((avg + 0.5 * std) * scale))
+        return min_val, max_val
 
-    st.header("4. Results")
-    results = []
-    for tag in ["h2", "h3", "h4", "p"]:
-        min_r, max_r = compute_range(tag)
-        current = user_data[tag]
-        status = "✅ OK" if min_r <= current <= max_r else ("⬇️ Too Low" if current < min_r else "⬆️ Too High")
-        results.append({
-            "Tag": tag.upper(),
-            "Current": current,
-            "Min Recommended": min_r,
-            "Max Recommended": max_r,
+    st.header("5. Tag Placement Recommendations")
+    recs = []
+    for section in ["h2", "h3", "h4", "p"]:
+        min_v, max_v = compute_range(section)
+        val = user_data[section]
+        status = "✅ OK" if min_v <= val <= max_v else ("⬇ Too Low" if val < min_v else "⬆ Too High")
+        recs.append({
+            "Tag": section.upper(),
+            "Your Count": val,
+            "Recommended Min": min_v,
+            "Recommended Max": max_v,
             "Status": status
         })
-    st.dataframe(pd.DataFrame(results))
+
+    st.dataframe(pd.DataFrame(recs))
