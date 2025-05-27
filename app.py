@@ -45,78 +45,77 @@ def cleaned_word_count(soup):
     text = re.sub(r'\s+', ' ', text)
     return len(text.split())
 
-# --- Count logic: each variation counts once per tag, allow overlapping ---
-def count_variations_per_tag(soup, tag, variation_list):
-    tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p"])
+# --- Match logic with non-overlapping variations, prefer longest, no <div> ---
+def count_variations_strict(soup, tag, variation_list):
+    tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p", "li"])
     total = 0
     sorted_vars = sorted(variation_list, key=lambda x: -len(x))
     for el in tags:
         text = el.get_text(separator=' ', strip=True).lower()
-        found = set()
+        used_spans = []
         for var in sorted_vars:
             pattern = re.compile(r'(?<!\w)' + re.escape(var) + r'(?!\w)')
-            if pattern.search(text):
-                found.add(var)
-        total += len(found)
+            for match in pattern.finditer(text):
+                span = match.span()
+                if any(s <= span[0] < e or s < span[1] <= e for s, e in used_spans):
+                    continue
+                used_spans.append(span)
+                total += 1
+                break
     return total
 
-# --- Extract info from file ---
-def extract_word_count_and_structure(file):
+# --- Extract structure and word count ---
+def extract_info(file):
     content = file.read()
     soup = BeautifulSoup(content, "html.parser")
     word_count = cleaned_word_count(soup)
     structure = {
-        "h2": count_variations_per_tag(soup, "h2", list(variation_parts)),
-        "h3": count_variations_per_tag(soup, "h3", list(variation_parts)),
-        "h4": count_variations_per_tag(soup, "h4", list(variation_parts)),
-        "p": count_variations_per_tag(soup, "p", list(variation_parts))
+        "h2": count_variations_strict(soup, "h2", list(variation_parts)),
+        "h3": count_variations_strict(soup, "h3", list(variation_parts)),
+        "h4": count_variations_strict(soup, "h4", list(variation_parts)),
+        "p": count_variations_strict(soup, "p", list(variation_parts))
     }
     return word_count, structure
 
-# --- Main logic ---
+# --- Range calculation logic ---
+def compute_range(values, scale, section):
+    values = sorted(values)
+    if section == "p":
+        trimmed = values[1:-1] if len(values) > 4 else values
+    elif section == "h3":
+        capped = [min(v, 20) for v in values]
+        trimmed = capped[:-1] if len(capped) > 4 else capped
+    elif section == "h2":
+        trimmed = values[:-1] if len(values) > 4 else values
+    else:
+        trimmed = values
+    p10 = np.percentile(trimmed, 10)
+    p90 = np.percentile(trimmed, 90)
+    return int(np.floor(p10 * scale)), int(np.ceil(p90 * scale))
+
+# --- Main processing ---
 if user_file and competitor_files and variations:
-    user_word_count, user_structure = extract_word_count_and_structure(user_file)
-    comp_word_counts = []
-    comp_structures = []
-    for comp_file in competitor_files:
-        wc, struct = extract_word_count_and_structure(comp_file)
-        comp_word_counts.append(wc)
-        comp_structures.append(struct)
+    user_wc, user_struct = extract_info(user_file)
+    comp_wcs, comp_structs = [], []
+    for f in competitor_files:
+        wc, s = extract_info(f)
+        comp_wcs.append(wc)
+        comp_structs.append(s)
+    avg_wc = np.average(comp_wcs, weights=weight_inputs)
+    scale = user_wc / avg_wc if avg_wc > 0 else 1.0
 
-    avg_word_count = np.average(comp_word_counts, weights=weight_inputs)
-    scale = user_word_count / avg_word_count if avg_word_count > 0 else 1.0
-
-    def compute_section_range(section):
-        counts = [s[section] for s in comp_structures]
-        counts_sorted = sorted(counts)
-
-        if section == "p":
-            trimmed = counts_sorted[1:-1] if len(counts_sorted) > 4 else counts_sorted
-        elif section == "h3":
-            capped = [min(v, 20) for v in counts_sorted]
-            trimmed = capped[:-1] if len(capped) > 4 else capped
-        elif section == "h2":
-            trimmed = counts_sorted[:-1] if len(counts_sorted) > 4 else counts_sorted
-        else:
-            trimmed = counts_sorted
-
-        p10 = np.percentile(trimmed, 10)
-        p90 = np.percentile(trimmed, 90)
-        return int(np.floor(p10 * scale)), int(np.ceil(p90 * scale))
-
-    # --- Output ---
     st.header("5. Tag Placement Recommendations")
-    recs = []
+    results = []
     for sec in ["h2", "h3", "h4", "p"]:
-        min_val, max_val = compute_section_range(sec)
-        current = user_structure[sec]
-        status = "Too few" if current < min_val else ("Too many" if current > max_val else "OK")
-        recs.append({
+        vals = [s[sec] for s in comp_structs]
+        min_v, max_v = compute_range(vals, scale, sec)
+        current = user_struct[sec]
+        status = "Too few" if current < min_v else ("Too many" if current > max_v else "OK")
+        results.append({
             "Tag": sec.upper(),
             "Current Matches": current,
-            "Recommended Min": min_val,
-            "Recommended Max": max_val,
+            "Recommended Min": min_v,
+            "Recommended Max": max_v,
             "Status": status
         })
-
-    st.dataframe(pd.DataFrame(recs))
+    st.dataframe(pd.DataFrame(results))
