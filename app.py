@@ -65,7 +65,12 @@ def analyze_file(file):
     except:
         pass
     try:
-        soup = BeautifulSoup(file.read(), "html.parser")
+        raw = file.read()
+        try:
+            decoded = raw.decode("utf-8")
+        except:
+            decoded = raw.decode("latin1")
+        soup = BeautifulSoup(decoded, "html.parser")
     except Exception as e:
         st.error(f"Failed to parse HTML: {e}")
         return {"h2": 0, "h3": 0, "h4": 0, "p": 0}, 0, {"h2": [], "h3": [], "h4": [], "p": []}
@@ -73,6 +78,7 @@ def analyze_file(file):
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     matches_per_tag = {"h2": [], "h3": [], "h4": [], "p": []}
     try:
+        tag_debug_list = []
         for tag in soup.find_all(True):
             name = tag.name.lower()
             if name in HEADINGS or name in P_TAGS:
@@ -90,6 +96,7 @@ def analyze_file(file):
                         used_spans.append(span)
                         count += 1
                         found.append(m.group())
+                                tag_debug_list.append((name, text))
                 if count:
                     tag_key = "p" if name in P_TAGS else name
                     counts[tag_key] += count
@@ -103,6 +110,9 @@ def analyze_file(file):
         st.error(f"Failed to count words: {e}")
         wc = 0
 
+            if tag_debug_list:
+            st.subheader("First 10 visible tags from parsed HTML")
+            st.json(tag_debug_list[:10])
     return counts, wc, matches_per_tag
 
 # Run analysis only when all needed files are present
