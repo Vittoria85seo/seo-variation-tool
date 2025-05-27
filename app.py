@@ -44,23 +44,17 @@ def cleaned_word_count(soup):
     text = re.sub(r'\s+', ' ', text)
     return len(text.split())
 
-# --- Count logic: each variation counts once per tag, even if overlapping ---
-def count_variations_accurately(soup, tag, variation_list):
+# --- Count logic: count all variation matches per tag, allowing overlap ---
+def count_variations_overlap(soup, tag, variation_list):
     tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p"])
     total = 0
     sorted_vars = sorted(variation_list, key=lambda x: -len(x))
     for el in tags:
         text = el.get_text(separator=' ', strip=True).lower()
-        used_spans = []
         for var in sorted_vars:
             pattern = re.compile(r'(?<!\w)' + re.escape(var) + r'(?!\w)')
-            for match in pattern.finditer(text):
-                span = match.span()
-                if any(s <= span[0] < e or s < span[1] <= e for s, e in used_spans):
-                    continue
-                used_spans.append(span)
+            if re.search(pattern, text):
                 total += 1
-                break
     return total
 
 # --- Extract info from file ---
@@ -69,10 +63,10 @@ def extract_word_count_and_sections(file):
     soup = BeautifulSoup(content, "html.parser")
     word_count = cleaned_word_count(soup)
     structure = {
-        "h2": count_variations_accurately(soup, "h2", list(variation_parts)),
-        "h3": count_variations_accurately(soup, "h3", list(variation_parts)),
-        "h4": count_variations_accurately(soup, "h4", list(variation_parts)),
-        "p": count_variations_accurately(soup, "p", list(variation_parts))
+        "h2": count_variations_overlap(soup, "h2", list(variation_parts)),
+        "h3": count_variations_overlap(soup, "h3", list(variation_parts)),
+        "h4": count_variations_overlap(soup, "h4", list(variation_parts)),
+        "p": count_variations_overlap(soup, "p", list(variation_parts))
     }
     return word_count, structure
 
