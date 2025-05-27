@@ -93,7 +93,7 @@ if user_file and len(valid_comp_files) == 10 and variation_patterns:
     user_counts, user_wc, user_matches = analyze_file(user_file)
     comp_data = []
     comp_wordcounts = []
-    for f in valid_comp_files:
+    for idx, f in enumerate(valid_comp_files):
         counts, wc, _ = analyze_file(f)
         comp_data.append(counts)
         comp_wordcounts.append(wc)
@@ -108,6 +108,10 @@ if user_file and len(valid_comp_files) == 10 and variation_patterns:
     st.write(f"Your word count: {user_wc}")
     st.write(f"Competitor avg word count (weighted): {wc_avg:.2f}")
     st.write(f"Ratio: {ratio:.4f}")
+
+    st.subheader("Competitor variation counts")
+    for tag in ALL_TAGS:
+        st.write(f"{tag.upper()}: {df[tag]}")
 
     st.subheader("Results")
     for tag in ALL_TAGS:
