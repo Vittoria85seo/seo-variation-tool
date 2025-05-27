@@ -10,15 +10,19 @@ st.title("SEO Variation Analyzer")
 user_url = st.text_input("Your Page URL")
 user_file = st.file_uploader("Upload your HTML file", type="html", key="user")
 
-st.markdown("**Top 10 Competitors**")
-comp_urls = []
+# Input all competitor URLs at once
+st.markdown("**Enter All 10 Competitor URLs (one per line)**")
+url_block = st.text_area("Paste competitor URLs here")
+parsed_urls = [u.strip() for u in url_block.splitlines() if u.strip()]
+
+# Always create 10 upload fields, aligned with parsed_urls or placeholder
+comp_urls = parsed_urls + [f"Competitor {i+1}" for i in range(len(parsed_urls), 10)]
 comp_files = []
-for i in range(10):
-    url = st.text_input(f"Competitor {i+1} URL", key=f"url_{i}")
-    file = st.file_uploader("", type="html", key=f"html_{i}")
-    if url and file:
-        comp_urls.append(url)
-        comp_files.append(file)
+
+for i, label in enumerate(comp_urls):
+    st.markdown(f"**{i+1}. {label}**")
+    file = st.file_uploader("Upload HTML for this competitor", type="html", key=f"html_{i}")
+    comp_files.append(file)
 
 # Variations
 raw_variations = st.text_area("Enter comma-separated variation phrases")
@@ -66,33 +70,16 @@ def analyze_file(file):
     wc = count_words(soup)
     return counts, wc
 
-if user_file and comp_files and variations:
+# Run analysis only when all needed files are present
+valid_comp_files = [f for f in comp_files if f is not None]
+if user_file and len(valid_comp_files) == 10 and variations:
     user_counts, user_wc = analyze_file(user_file)
     comp_data = []
     comp_wordcounts = []
-    for f in comp_files:
+    for f in valid_comp_files:
         counts, wc = analyze_file(f)
         comp_data.append(counts)
         comp_wordcounts.append(wc)
 
     df = {tag: [row[tag] for row in comp_data] for tag in ALL_TAGS}
-    weights = np.exp(-np.arange(len(comp_files)))
-    weights /= weights.sum()
-    wc_avg = np.average(comp_wordcounts, weights=weights)
-    ratio = user_wc / wc_avg
-
-    st.subheader("Results")
-    for tag in ALL_TAGS:
-        values = np.array(df[tag])
-        avg = np.average(values, weights=weights)
-        std = np.sqrt(np.average((values - avg) ** 2, weights=weights))
-        min_val = round((avg - std) * ratio)
-        max_val = round((avg + std) * ratio)
-        current = user_counts[tag]
-        if current < min_val:
-            status = "Add"
-        elif current > max_val:
-            status = "Reduce"
-        else:
-            status = "OK"
-        st.markdown(f"**{tag.upper()}**: {current} | Range: {min_val}-{max_val} → {status}")
+    weights = np.exp(-np.arange(len(
