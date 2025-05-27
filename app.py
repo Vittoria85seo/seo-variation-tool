@@ -60,31 +60,49 @@ def count_words(soup):
     return len(re.sub(r'\s+', ' ', text).split())
 
 def analyze_file(file):
-    soup = BeautifulSoup(file.read(), "html.parser")
+    try:
+        file.seek(0)
+    except:
+        pass
+    try:
+        soup = BeautifulSoup(file.read(), "html.parser")
+    except Exception as e:
+        st.error(f"Failed to parse HTML: {e}")
+        return {"h2": 0, "h3": 0, "h4": 0, "p": 0}, 0, {"h2": [], "h3": [], "h4": [], "p": []}
+
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     matches_per_tag = {"h2": [], "h3": [], "h4": [], "p": []}
-    for tag in soup.find_all(True):
-        name = tag.name.lower()
-        if name in HEADINGS or name in P_TAGS:
-            if not is_valid(tag):
-                continue
-            text = get_text(tag)
-            count = 0
-            used_spans = []
-            found = []
-            for pattern in variation_patterns:
-                for m in pattern.finditer(text):
-                    span = m.span()
-                    if any(s <= span[0] < e or s < span[1] <= e for s, e in used_spans):
-                        continue
-                    used_spans.append(span)
-                    count += 1
-                    found.append(m.group())
-            if count:
-                tag_key = "p" if name in P_TAGS else name
-                counts[tag_key] += count
-                matches_per_tag[tag_key].extend(found)
-    wc = count_words(soup)
+    try:
+        for tag in soup.find_all(True):
+            name = tag.name.lower()
+            if name in HEADINGS or name in P_TAGS:
+                if not is_valid(tag):
+                    continue
+                text = get_text(tag)
+                count = 0
+                used_spans = []
+                found = []
+                for pattern in variation_patterns:
+                    for m in pattern.finditer(text):
+                        span = m.span()
+                        if any(s <= span[0] < e or s < span[1] <= e for s, e in used_spans):
+                            continue
+                        used_spans.append(span)
+                        count += 1
+                        found.append(m.group())
+                if count:
+                    tag_key = "p" if name in P_TAGS else name
+                    counts[tag_key] += count
+                    matches_per_tag[tag_key].extend(found)
+    except Exception as e:
+        st.error(f"Failed during tag processing: {e}")
+
+    try:
+        wc = count_words(soup)
+    except Exception as e:
+        st.error(f"Failed to count words: {e}")
+        wc = 0
+
     return counts, wc, matches_per_tag
 
 # Run analysis only when all needed files are present
@@ -94,10 +112,12 @@ if user_file and len(valid_comp_files) == 10 and variation_patterns:
     comp_data = []
     comp_wordcounts = []
     for idx, f in enumerate(valid_comp_files):
-        f.seek(0)
-        counts, wc, _ = analyze_file(f)
-        comp_data.append(counts)
-        comp_wordcounts.append(wc)
+        try:
+            counts, wc, _ = analyze_file(f)
+            comp_data.append(counts)
+            comp_wordcounts.append(wc)
+        except Exception as e:
+            st.error(f"Competitor {idx+1} failed to analyze: {e}")
 
     df = {tag: [row[tag] for row in comp_data] for tag in ALL_TAGS}
     weights = np.exp(-np.arange(len(valid_comp_files)))
