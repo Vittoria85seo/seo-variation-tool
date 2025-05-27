@@ -94,6 +94,7 @@ if user_file and len(valid_comp_files) == 10 and variation_patterns:
     comp_data = []
     comp_wordcounts = []
     for idx, f in enumerate(valid_comp_files):
+        f.seek(0)
         counts, wc, _ = analyze_file(f)
         comp_data.append(counts)
         comp_wordcounts.append(wc)
