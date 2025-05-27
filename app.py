@@ -45,22 +45,23 @@ def cleaned_word_count(soup):
     text = re.sub(r'\s+', ' ', text)
     return len(text.split())
 
-# --- Variation matching logic: overlapping allowed, each variation once per tag ---
+# --- Count logic: each variation counts once per tag, allow overlapping ---
 def count_variations_per_tag(soup, tag, variation_list):
     tags = soup.find_all(tag) if tag != "p" else soup.find_all(["p"])
-    count = 0
+    total = 0
     sorted_vars = sorted(variation_list, key=lambda x: -len(x))
     for el in tags:
         text = el.get_text(separator=' ', strip=True).lower()
         found = set()
         for var in sorted_vars:
-            if re.search(r'(?<!\w)' + re.escape(var) + r'(?!\w)', text):
+            pattern = re.compile(r'(?<!\w)' + re.escape(var) + r'(?!\w)')
+            if pattern.search(text):
                 found.add(var)
-        count += len(found)
-    return count
+        total += len(found)
+    return total
 
 # --- Extract info from file ---
-def extract_word_count_and_sections(file):
+def extract_word_count_and_structure(file):
     content = file.read()
     soup = BeautifulSoup(content, "html.parser")
     word_count = cleaned_word_count(soup)
@@ -74,11 +75,11 @@ def extract_word_count_and_sections(file):
 
 # --- Main logic ---
 if user_file and competitor_files and variations:
-    user_word_count, user_structure = extract_word_count_and_sections(user_file)
+    user_word_count, user_structure = extract_word_count_and_structure(user_file)
     comp_word_counts = []
     comp_structures = []
     for comp_file in competitor_files:
-        wc, struct = extract_word_count_and_sections(comp_file)
+        wc, struct = extract_word_count_and_structure(comp_file)
         comp_word_counts.append(wc)
         comp_structures.append(struct)
 
@@ -87,17 +88,17 @@ if user_file and competitor_files and variations:
 
     def compute_section_range(section):
         counts = [s[section] for s in comp_structures]
+        counts_sorted = sorted(counts)
 
-        # Outlier handling
         if section == "p":
-            trimmed = sorted(counts)[1:-1] if len(counts) > 4 else counts
+            trimmed = counts_sorted[1:-1] if len(counts_sorted) > 4 else counts_sorted
         elif section == "h3":
-            capped = [min(v, 20) for v in counts]
-            trimmed = sorted(capped)[1:-1] if len(capped) > 4 else capped
+            capped = [min(v, 20) for v in counts_sorted]
+            trimmed = capped[:-1] if len(capped) > 4 else capped
         elif section == "h2":
-            trimmed = sorted(counts)[1:-1] if len(counts) > 4 else counts
+            trimmed = counts_sorted[:-1] if len(counts_sorted) > 4 else counts_sorted
         else:
-            trimmed = counts
+            trimmed = counts_sorted
 
         p10 = np.percentile(trimmed, 10)
         p90 = np.percentile(trimmed, 90)
