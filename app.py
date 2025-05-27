@@ -42,13 +42,6 @@ P_TAGS = {"p", "li"}
 HEADINGS = {"h2", "h3", "h4"}
 ALL_TAGS = ["h2", "h3", "h4", "p"]
 
-def is_valid(tag):
-    parent = tag.find_parent()
-    while parent:
-        if parent.name == "div" and parent.name not in HEADINGS and parent.name not in P_TAGS:
-            return False
-        parent = parent.find_parent()
-    return True
 
 def get_text(tag):
     return tag.get_text(separator=" ", strip=True).lower()
@@ -82,9 +75,7 @@ def analyze_file(file):
         for tag in soup.find_all(True):
             name = tag.name.lower()
             if name in HEADINGS or name in P_TAGS:
-                if not is_valid(tag):
-                    continue
-                text = get_text(tag)
+                                text = get_text(tag)
                 count = 0
                 used_spans = []
                 found = []
