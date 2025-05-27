@@ -109,15 +109,24 @@ def analyze_file(file):
 valid_comp_files = [f for f in comp_files if f is not None]
 if user_file and len(valid_comp_files) == 10 and variation_patterns:
     user_counts, user_wc, user_matches = analyze_file(user_file)
+
+    st.subheader("User Debug")
+    st.json({"counts": user_counts, "matches": user_matches})
+
     comp_data = []
     comp_wordcounts = []
+    comp_debug = []
     for idx, f in enumerate(valid_comp_files):
         try:
-            counts, wc, _ = analyze_file(f)
+            counts, wc, matches = analyze_file(f)
             comp_data.append(counts)
             comp_wordcounts.append(wc)
+            comp_debug.append({"index": idx + 1, "wc": wc, "counts": counts})
         except Exception as e:
             st.error(f"Competitor {idx+1} failed to analyze: {e}")
+
+    st.subheader("Competitor File Debug Info")
+    st.json(comp_debug)
 
     df = {tag: [row[tag] for row in comp_data] for tag in ALL_TAGS}
     weights = np.exp(-np.arange(len(valid_comp_files)))
@@ -125,12 +134,11 @@ if user_file and len(valid_comp_files) == 10 and variation_patterns:
     wc_avg = np.average(comp_wordcounts, weights=weights)
     ratio = user_wc / wc_avg
 
-    st.subheader("Debug Info")
+    st.subheader("Summary Debug")
     st.write(f"Your word count: {user_wc}")
     st.write(f"Competitor avg word count (weighted): {wc_avg:.2f}")
     st.write(f"Ratio: {ratio:.4f}")
-
-    st.subheader("Competitor variation counts")
+    st.write("Competitor variation counts:")
     for tag in ALL_TAGS:
         st.write(f"{tag.upper()}: {df[tag]}")
 
