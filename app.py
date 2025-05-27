@@ -53,13 +53,13 @@ if html_file and variations:
             text = get_text_content(tag)
             matched = set()
             for variation in variations:
-                if re.search(rf"(?<!\w){re.escape(variation)}(?!\w)", text):
+                if re.search(rf"(?<!\\w){re.escape(variation)}(?!\\w)", text):
                     matched.add(variation)
-            if matched:
-                if tag_name in P_TAGS:
-                    variation_counts["p"] += len(matched)
-                else:
-                    variation_counts[tag_name] += len(matched)
+            # Deduplicate by tag level (variation only counted once per tag block)
+            if tag_name in P_TAGS:
+                variation_counts["p"] += len(matched)
+            elif tag_name in HEADINGS:
+                variation_counts[tag_name] += len(matched)
 
     ratio = user_wc / avg_wc
     scaled_ranges = {
