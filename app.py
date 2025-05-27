@@ -1,50 +1,53 @@
 import streamlit as st
 from bs4 import BeautifulSoup
 import re
+import numpy as np
+import io
 
+st.set_page_config(page_title="SEO Variation Analyzer", layout="wide")
 st.title("SEO Variation Analyzer (Standardized Math)")
 
-# User inputs
-html_file = st.file_uploader("Upload your HTML file", type="html")
-user_wc = st.number_input("Your page word count", min_value=1, value=1101)
-avg_wc = st.number_input("Competitor average word count", min_value=1, value=2922)
+# Step 1 – Upload your HTML
+st.header("1. Upload Your Page and Competitors")
+user_file = st.file_uploader("Upload your HTML file (your page)", type="html", key="user")
 
-# Input variations
+st.markdown("### Competitors (top 10 in order)")
+comp_files = []
+for i in range(10):
+    file = st.file_uploader(f"Competitor {i+1} HTML", type="html", key=f"html_{i}")
+    if file:
+        comp_files.append(file)
+
+# Step 2 – Enter variation terms
+st.header("2. Enter Variation Terms")
 raw_variations = st.text_area("Enter comma-separated variation phrases")
 variations = set(v.strip().lower() for v in raw_variations.split(",") if v.strip())
 
-# Input raw min/max ranges
-st.markdown("### Enter competitor min/max per tag")
-raw_min = {
-    "h2": st.number_input("Min H2", value=0),
-    "h3": st.number_input("Min H3", value=0),
-    "h4": st.number_input("Min H4", value=0),
-    "p": st.number_input("Min P/LI", value=0),
-}
-raw_max = {
-    "h2": st.number_input("Max H2", value=0),
-    "h3": st.number_input("Max H3", value=0),
-    "h4": st.number_input("Max H4", value=0),
-    "p": st.number_input("Max P/LI", value=0),
-}
+P_TAGS = {"p", "li"}
+HEADINGS = {"h2", "h3", "h4"}
+ALL_TAGS = ["h2", "h3", "h4", "p"]
 
-if html_file and variations:
-    soup = BeautifulSoup(html_file.read(), "html.parser")
-    variation_counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
-    P_TAGS = {"p", "li"}
-    HEADINGS = {"h2", "h3", "h4"}
+# Helpers
+def is_valid(tag):
+    parent = tag.find_parent()
+    while parent:
+        if parent.name == "div" and parent.name not in HEADINGS and parent.name not in P_TAGS:
+            return False
+        parent = parent.find_parent()
+    return True
 
-    def is_valid(tag):
-        parent = tag.find_parent()
-        while parent:
-            if parent.name == "div" and parent.name not in HEADINGS and parent.name not in P_TAGS:
-                return False
-            parent = parent.find_parent()
-        return True
+def get_text_content(tag):
+    return tag.get_text(separator=" ", strip=True).lower()
 
-    def get_text_content(tag):
-        return tag.get_text(separator=" ", strip=True).lower()
+def count_words(soup):
+    for tag in soup(["script", "style"]):
+        tag.decompose()
+    text = soup.get_text(separator=' ', strip=True)
+    return len(re.sub(r'\s+', ' ', text).split())
 
+def analyze_file(file):
+    soup = BeautifulSoup(file.read(), "html.parser")
+    counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     for tag in soup.find_all(True):
         tag_name = tag.name.lower()
         if tag_name in HEADINGS or tag_name in P_TAGS:
@@ -55,25 +58,45 @@ if html_file and variations:
             for variation in variations:
                 if re.search(rf"(?<!\\w){re.escape(variation)}(?!\\w)", text):
                     matched.add(variation)
-            # Deduplicate by tag level (variation only counted once per tag block)
-            if tag_name in P_TAGS:
-                variation_counts["p"] += len(matched)
-            elif tag_name in HEADINGS:
-                variation_counts[tag_name] += len(matched)
+            if matched:
+                if tag_name in P_TAGS:
+                    counts["p"] += len(matched)
+                else:
+                    counts[tag_name] += len(matched)
+    wc = count_words(soup)
+    return counts, wc
 
-    ratio = user_wc / avg_wc
-    scaled_ranges = {
-        tag: (round(ratio * raw_min[tag]), round(ratio * raw_max[tag])) for tag in ["h2", "h3", "h4", "p"]
-    }
+# Step 3 – Run analysis
+if user_file and comp_files and variations:
+    user_counts, user_wc = analyze_file(user_file)
 
-    st.markdown("### Results")
-    for tag in ["h2", "h3", "h4", "p"]:
-        my_count = variation_counts[tag]
-        low, high = scaled_ranges[tag]
-        if my_count < low:
+    comp_data = []
+    comp_wordcounts = []
+    for f in comp_files:
+        counts, wc = analyze_file(f)
+        comp_data.append(counts)
+        comp_wordcounts.append(wc)
+
+    df = {tag: [row[tag] for row in comp_data] for tag in ALL_TAGS}
+    weights = np.exp(-np.arange(len(comp_files)))
+    weights /= weights.sum()
+    wc_avg = np.average(comp_wordcounts, weights=weights)
+    ratio = user_wc / wc_avg
+
+    st.header("3. Results")
+    for tag in ALL_TAGS:
+        values = np.array(df[tag])
+        avg = np.average(values, weights=weights)
+        std = np.sqrt(np.average((values - avg) ** 2, weights=weights))
+        min_val = round((avg - std) * ratio)
+        max_val = round((avg + std) * ratio)
+
+        current = user_counts[tag]
+        if current < min_val:
             status = "Add"
-        elif my_count > high:
+        elif current > max_val:
             status = "Reduce"
         else:
             status = "OK"
-        st.write(f"**{tag.upper()}** — Yours: {my_count} | Range: {low}-{high} → {status}")
+
+        st.write(f"**{tag.upper()}** — Yours: {current} | Range: {min_val}-{max_val} → {status}")
