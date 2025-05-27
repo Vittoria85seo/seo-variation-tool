@@ -32,6 +32,7 @@ for v in variations:
     variation_parts.update(v.split())
 variation_parts.update(variations)
 
+# Strict word-boundary match (no parts of words)
 variation_patterns = [
     re.compile(rf"(?<!\w){re.escape(v)}(?!\w)", re.IGNORECASE)
     for v in sorted(variation_parts, key=len, reverse=True)
@@ -61,32 +62,39 @@ def count_words(soup):
 def analyze_file(file):
     soup = BeautifulSoup(file.read(), "html.parser")
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
+    matches_per_tag = {"h2": [], "h3": [], "h4": [], "p": []}
     for tag in soup.find_all(True):
         name = tag.name.lower()
         if name in HEADINGS or name in P_TAGS:
             if not is_valid(tag):
                 continue
             text = get_text(tag)
-            matched = set()
+            count = 0
+            used_spans = []
+            found = []
             for pattern in variation_patterns:
-                if pattern.search(text):
-                    matched.add(pattern.pattern)
-            if matched:
-                if name in P_TAGS:
-                    counts["p"] += len(matched)
-                else:
-                    counts[name] += len(matched)
+                for m in pattern.finditer(text):
+                    span = m.span()
+                    if any(s <= span[0] < e or s < span[1] <= e for s, e in used_spans):
+                        continue
+                    used_spans.append(span)
+                    count += 1
+                    found.append(m.group())
+            if count:
+                tag_key = "p" if name in P_TAGS else name
+                counts[tag_key] += count
+                matches_per_tag[tag_key].extend(found)
     wc = count_words(soup)
-    return counts, wc
+    return counts, wc, matches_per_tag
 
 # Run analysis only when all needed files are present
 valid_comp_files = [f for f in comp_files if f is not None]
 if user_file and len(valid_comp_files) == 10 and variation_patterns:
-    user_counts, user_wc = analyze_file(user_file)
+    user_counts, user_wc, user_matches = analyze_file(user_file)
     comp_data = []
     comp_wordcounts = []
     for f in valid_comp_files:
-        counts, wc = analyze_file(f)
+        counts, wc, _ = analyze_file(f)
         comp_data.append(counts)
         comp_wordcounts.append(wc)
 
@@ -109,6 +117,7 @@ if user_file and len(valid_comp_files) == 10 and variation_patterns:
         min_val = round((avg - std) * ratio)
         max_val = round((avg + std) * ratio)
         current = user_counts[tag]
+        matched_list = user_matches[tag]
         if current < min_val:
             status = "Add"
         elif current > max_val:
@@ -117,3 +126,5 @@ if user_file and len(valid_comp_files) == 10 and variation_patterns:
             status = "OK"
 
         st.markdown(f"**{tag.upper()}**: {current} | Range: {min_val}-{max_val} → {status}")
+        if matched_list:
+            st.caption(f"Matched in {tag.upper()}: {', '.join(sorted(set(matched_list)))}")
