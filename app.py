@@ -9,13 +9,20 @@ st.title("SEO Variation Analyzer (Standardized Math)")
 
 # Step 1 – Upload your HTML
 st.header("1. Upload Your Page and Competitors")
+user_url = st.text_input("Your Page URL")
 user_file = st.file_uploader("Upload your HTML file (your page)", type="html", key="user")
 
-st.markdown("### Competitors (top 10 in order)")
+st.markdown("### Competitors (URL and HTML Upload)")
+comp_urls = []
 comp_files = []
 for i in range(10):
-    file = st.file_uploader(f"Competitor {i+1} HTML", type="html", key=f"html_{i}")
-    if file:
+    col1, col2 = st.columns([2, 2])
+    with col1:
+        url = st.text_input(f"Competitor {i+1} URL", key=f"url_{i}")
+    with col2:
+        file = st.file_uploader(f"Competitor {i+1} HTML", type="html", key=f"html_{i}")
+    if url and file:
+        comp_urls.append(url)
         comp_files.append(file)
 
 # Step 2 – Enter variation terms
