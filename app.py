@@ -82,4 +82,23 @@ if user_file and len(valid_comp_files) == 10 and variations:
         comp_wordcounts.append(wc)
 
     df = {tag: [row[tag] for row in comp_data] for tag in ALL_TAGS}
-    weights = np.exp(-np.arange(len(
+    weights = np.exp(-np.arange(len(valid_comp_files)))
+    weights /= weights.sum()
+    wc_avg = np.average(comp_wordcounts, weights=weights)
+    ratio = user_wc / wc_avg
+
+    st.subheader("Results")
+    for tag in ALL_TAGS:
+        values = np.array(df[tag])
+        avg = np.average(values, weights=weights)
+        std = np.sqrt(np.average((values - avg) ** 2, weights=weights))
+        min_val = round((avg - std) * ratio)
+        max_val = round((avg + std) * ratio)
+        current = user_counts[tag]
+        if current < min_val:
+            status = "Add"
+        elif current > max_val:
+            status = "Reduce"
+        else:
+            status = "OK"
+        st.markdown(f"**{tag.upper()}**: {current} | Range: {min_val}-{max_val} → {status}")
