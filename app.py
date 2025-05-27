@@ -34,7 +34,7 @@ variation_parts.update(variations)
 
 # Strict word-boundary match (no parts of words)
 variation_patterns = [
-    re.compile(rf"(?<!\w){re.escape(v)}(?!\w)", re.IGNORECASE)
+    re.compile(rf"(?<!\w){re.sub(r'\s+', ' ', re.escape(v)).replace('\ ', ' ')}(?!\w)", re.IGNORECASE)
     for v in sorted(variation_parts, key=len, reverse=True)
 ]
 
