@@ -113,6 +113,9 @@ if user_file and len(valid_comp_files) == 10 and variation_patterns:
     st.subheader("User Debug")
     st.json({"counts": user_counts, "matches": user_matches})
 
+    st.subheader("Compiled Regex Patterns")
+    st.write([p.pattern for p in variation_patterns])
+
     comp_data = []
     comp_wordcounts = []
     comp_debug = []
