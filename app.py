@@ -24,7 +24,6 @@ if len(competitor_urls) == 10:
 variations_input = st.text_area("Enter variation terms (comma-separated)")
 variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
-
 def extract_tag_texts(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
     for tag in ["script", "style", "noscript"]:
@@ -58,33 +57,19 @@ def count_variations(texts, variations):
             counts[tag] += len(matched)
     return counts
 
-def weighted_percentile(data, weights, percentiles):
-    data, weights = np.array(data), np.array(weights)
-    sorter = np.argsort(data)
-    data_sorted = data[sorter]
-    weights_sorted = weights[sorter]
-    cum_weights = np.cumsum(weights_sorted)
-    total = cum_weights[-1]
-    percentile_values = []
-    for p in percentiles:
-        cutoff = total * (p / 100.0)
-        idx = np.searchsorted(cum_weights, cutoff)
-        idx = min(len(data_sorted) - 1, idx)
-        percentile_values.append(data_sorted[idx])
-    return percentile_values
-
-def compute_variation_ranges(tag_counts_dict, user_wc, avg_wc, weights):
+def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
     result = {}
-    scale = user_wc / avg_wc if avg_wc else 1.0
+    scale = user_wc / np.mean(comp_wcs)
     for tag, counts in tag_counts_dict.items():
-        min_v, max_v = weighted_percentile(counts, weights, [10, 90])
-        if tag == "p":
-            min_adj = int(np.floor(min_v * scale))
-            max_adj = int(np.ceil(max_v * scale))
-        else:
-            min_adj = int(np.floor(min_v))
-            max_adj = int(np.ceil(max_v))
-        result[tag] = (min_adj, max_adj)
+        scaled_counts = [c * scale if tag == "p" else c for c in counts]
+        w_avg = np.average(scaled_counts, weights=weights)
+        w_std = np.sqrt(np.average((scaled_counts - w_avg) ** 2, weights=weights))
+        min_v = int(np.floor(w_avg - 0.85 * w_std))
+        max_v = int(np.ceil(w_avg + 0.85 * w_std))
+        if tag != "p":
+            min_v = max(min_v, 0)
+            max_v = max(max_v, 0)
+        result[tag] = (min_v, max_v)
     return result
 
 if user_file and len(competitor_files) == 10 and all(competitor_files) and variations:
@@ -100,10 +85,9 @@ if user_file and len(competitor_files) == 10 and all(competitor_files) and varia
         comp_wcs.append(wc)
         comp_counts.append(count_variations(texts, variations))
 
-    avg_comp_wc = np.mean(comp_wcs)
     tag_counts_dict = {tag: [c[tag] for c in comp_counts] for tag in ["h2", "h3", "h4", "p"]}
     fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
-    ranges = compute_variation_ranges(tag_counts_dict, user_wc, avg_comp_wc, weights=fixed_weights)
+    ranges = benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, fixed_weights)
 
     df_data = {
         "Tag": ["H2", "H3", "H4", "P"],
