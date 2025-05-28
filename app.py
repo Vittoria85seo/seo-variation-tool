@@ -24,6 +24,7 @@ if len(competitor_urls) == 10:
 variations_input = st.text_area("Enter variation terms (comma-separated)")
 variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
+
 def extract_tag_texts(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
     for tag in ["script", "style", "noscript"]:
@@ -38,10 +39,11 @@ def extract_tag_texts(html_str):
     word_count = len(soup.get_text(" ", strip=True).split())
     return texts, word_count
 
+
 def count_variations(texts, variations):
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=[\s\.,:;!?\-]|$)", flags=re.IGNORECASE)) for v in sorted_vars]
+    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=(?!\s-)[\s\.,:;!?)\-]|$)", flags=re.IGNORECASE)) for v in sorted_vars]
     for tag in counts:
         for txt in texts[tag]:
             used_spans = []
@@ -53,24 +55,26 @@ def count_variations(texts, variations):
                         continue
                     used_spans.append(span)
                     matched.add(var)
-                    break
             counts[tag] += len(matched)
     return counts
+
 
 def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
     result = {}
     scale = user_wc / np.mean(comp_wcs)
     for tag, counts in tag_counts_dict.items():
         scaled_counts = [c * scale if tag == "p" else c for c in counts]
-        w_avg = np.average(scaled_counts, weights=weights)
-        w_std = np.sqrt(np.average((scaled_counts - w_avg) ** 2, weights=weights))
-        min_v = int(np.floor(w_avg - 0.85 * w_std))
-        max_v = int(np.ceil(w_avg + 0.85 * w_std))
+        weighted = np.average(scaled_counts, weights=weights)
+        trimmed = [c for c, w in sorted(zip(scaled_counts, weights), key=lambda x: -x[1])[:4]]
+        mean = np.mean(trimmed)
+        min_v = int(np.floor(mean - 1))
+        max_v = int(np.ceil(mean + 1))
         if tag != "p":
             min_v = max(min_v, 0)
             max_v = max(max_v, 0)
         result[tag] = (min_v, max_v)
     return result
+
 
 if user_file and len(competitor_files) == 10 and all(competitor_files) and variations:
     user_html = user_file.read().decode("utf-8")
