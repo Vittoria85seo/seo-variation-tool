@@ -1,5 +1,5 @@
-# Final version of the SEO Variation Tool App with integrated math logic
-# Self-contained version: includes variation counting and weighted range math
+# Final version of the SEO Variation Tool App with improved benchmark math
+# Includes weighted percentiles and scaled recommendations per tag
 
 import streamlit as st
 import pandas as pd
@@ -11,30 +11,18 @@ from io import StringIO
 st.set_page_config(layout="wide")
 st.title("SEO Variation Distribution Tool")
 
-# -------------------------------
-# Variation Input
-# -------------------------------
 variations_input = st.text_area("Enter variation terms (comma-separated)")
 variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
-# -------------------------------
-# Upload User Page
-# -------------------------------
 st.subheader("Upload Your Page HTML")
 user_file = st.file_uploader("Upload HTML", type="html", key="user_html")
 
-# -------------------------------
-# Upload Competitor HTMLs
-# -------------------------------
 st.subheader("Upload Competitor HTMLs (1–10 in order)")
 competitor_files = []
 for i in range(10):
     f = st.file_uploader(f"Competitor {i+1}", type="html", key=f"comp{i}")
     competitor_files.append(f)
 
-# -------------------------------
-# Helper: Text Extraction and Count
-# -------------------------------
 def extract_tag_texts(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
     for tag in ["script", "style", "noscript"]:
@@ -69,9 +57,6 @@ def count_variations(texts, variations):
             counts[tag] += len(matched)
     return counts
 
-# -------------------------------
-# Math Logic for Range Calculation
-# -------------------------------
 def weighted_percentile(data, weights, percentiles):
     data, weights = np.array(data), np.array(weights)
     sorter = np.argsort(data)
@@ -101,9 +86,6 @@ def compute_variation_ranges(tag_counts_dict, user_wc, avg_wc, weights):
         result[tag] = (min_adj, max_adj)
     return result
 
-# -------------------------------
-# Collect Data
-# -------------------------------
 if user_file and all(competitor_files) and variations:
     user_html = user_file.read().decode("utf-8")
     user_texts, user_wc = extract_tag_texts(user_html)
@@ -123,9 +105,6 @@ if user_file and all(competitor_files) and variations:
     fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
     ranges = compute_variation_ranges(tag_counts_dict, user_wc, avg_comp_wc, weights=fixed_weights)
 
-    # -------------------------------
-    # Display Output
-    # -------------------------------
     df_data = {
         "Tag": ["H2", "H3", "H4", "P"],
         "Your Count": [user_counts[t] for t in ["h2", "h3", "h4", "p"]],
