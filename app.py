@@ -43,18 +43,21 @@ def extract_tag_texts(html_str):
 def count_variations(texts, variations):
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=(?!\s-)[\s\.,:;!?)\-]|$)", flags=re.IGNORECASE)) for v in sorted_vars]
+    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=\W|$)", flags=re.IGNORECASE)) for v in sorted_vars]
     for tag in counts:
         for txt in texts[tag]:
-            used_spans = []
             matched = set()
+            matched_spans = []
             for var, pattern in var_patterns:
                 for match in pattern.finditer(txt):
                     span = match.span()
-                    if any(start < span[1] and end > span[0] for start, end in used_spans):
+                    if var in matched:
                         continue
-                    used_spans.append(span)
+                    # Allow nested variation matches if character spans do not fully overlap
+                    if any(a < span[1] and b > span[0] for a, b in matched_spans):
+                        continue
                     matched.add(var)
+                    matched_spans.append(span)
             counts[tag] += len(matched)
     return counts
 
@@ -65,10 +68,9 @@ def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
     for tag, counts in tag_counts_dict.items():
         scaled_counts = [c * scale if tag == "p" else c for c in counts]
         weighted = np.average(scaled_counts, weights=weights)
-        trimmed = [c for c, w in sorted(zip(scaled_counts, weights), key=lambda x: -x[1])[:4]]
-        mean = np.mean(trimmed)
-        min_v = int(np.floor(mean - 1))
-        max_v = int(np.ceil(mean + 1))
+        stddev = np.sqrt(np.average((scaled_counts - weighted) ** 2, weights=weights))
+        min_v = int(np.floor(weighted - 0.85 * stddev))
+        max_v = int(np.ceil(weighted + 0.85 * stddev))
         if tag != "p":
             min_v = max(min_v, 0)
             max_v = max(max_v, 0)
