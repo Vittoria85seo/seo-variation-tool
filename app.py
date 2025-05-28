@@ -43,7 +43,7 @@ def extract_tag_texts(html_str):
 def count_variations(texts, variations):
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=\W|$)", flags=re.IGNORECASE)) for v in sorted_vars]
+    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=\b|\s[^\w]|$)", flags=re.IGNORECASE)) for v in sorted_vars]
     for tag in counts:
         for txt in texts[tag]:
             matched_spans = []
@@ -53,7 +53,7 @@ def count_variations(texts, variations):
                     span = match.span()
                     if var in matched_vars:
                         continue
-                    if span in matched_spans:
+                    if any(start <= span[0] < end or start < span[1] <= end for start, end in matched_spans):
                         continue
                     matched_vars.add(var)
                     matched_spans.append(span)
@@ -63,17 +63,23 @@ def count_variations(texts, variations):
 
 def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
     result = {}
-    scale = user_wc / np.mean(comp_wcs)
+    avg_wc = np.average(comp_wcs, weights=weights)
+    scale = user_wc / avg_wc if avg_wc else 1.0
     for tag, counts in tag_counts_dict.items():
-        scaled_counts = [c * scale if tag == "p" else c for c in counts]
-        weighted = np.average(scaled_counts, weights=weights)
-        stddev = np.sqrt(np.average((scaled_counts - weighted) ** 2, weights=weights))
-        min_v = int(np.floor(weighted - 0.85 * stddev))
-        max_v = int(np.ceil(weighted + 0.85 * stddev))
-        if tag != "p":
-            min_v = max(min_v, 0)
-            max_v = max(max_v, 0)
-        result[tag] = (min_v, max_v)
+        weighted_avg = np.average(counts, weights=weights)
+        stddev = np.sqrt(np.average((np.array(counts) - weighted_avg) ** 2, weights=weights))
+        spread = 0.15 if tag == "p" else 0.25
+        lo = weighted_avg - spread * stddev
+        hi = weighted_avg + spread * stddev
+        min_v = int(np.floor(lo * scale))
+        max_v = int(np.ceil(hi * scale))
+        min_v = max(min_v, 0)
+        max_v = max(max_v, 0)
+        # force H4 to 0-0 if all competitors had 0
+        if tag == "h4" and all(v == 0 for v in counts):
+            result[tag] = (0, 0)
+        else:
+            result[tag] = (min_v, max_v)
     return result
 
 
