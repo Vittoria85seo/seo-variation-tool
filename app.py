@@ -1,4 +1,4 @@
-# Final Streamlit App (layout matches original UI exactly)
+# Final Streamlit App (layout with proper URL + staged competitor upload)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -11,14 +11,19 @@ st.title("SEO Variation Distribution Tool")
 variations_input = st.text_area("Enter variation terms (comma-separated)")
 variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
-st.subheader("Upload Your Page HTML")
-user_file = st.file_uploader("Upload HTML", type="html", key="user_html")
+user_url = st.text_input("Your Page URL")
+user_file = st.file_uploader("Upload Your Page HTML", type="html", key="user_html")
 
-st.subheader("Upload Competitor HTMLs (in order)")
+competitor_urls_input = st.text_area("Enter Top 10 Competitor URLs (one per line)")
+competitor_urls = [u.strip() for u in competitor_urls_input.strip().splitlines() if u.strip()]
+
 competitor_files = []
-for i in range(10):
-    f = st.file_uploader(f"Competitor {i+1}", type="html", key=f"comp{i}")
-    competitor_files.append(f)
+if len(competitor_urls) == 10:
+    st.subheader("Upload Corresponding Competitor HTML Files (in order of URLs above)")
+    for i, url in enumerate(competitor_urls):
+        f = st.file_uploader(f"Competitor {i+1}: {url}", type="html", key=f"comp{i}")
+        competitor_files.append(f)
+
 
 def extract_tag_texts(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
@@ -82,7 +87,7 @@ def compute_variation_ranges(tag_counts_dict, user_wc, avg_wc, weights):
         result[tag] = (min_adj, max_adj)
     return result
 
-if user_file and all(competitor_files) and variations:
+if user_file and len(competitor_files) == 10 and all(competitor_files) and variations:
     user_html = user_file.read().decode("utf-8")
     user_texts, user_wc = extract_tag_texts(user_html)
     user_counts = count_variations(user_texts, variations)
