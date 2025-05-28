@@ -5,11 +5,8 @@ import numpy as np
 import re
 from bs4 import BeautifulSoup
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="centered")
 st.title("SEO Variation Distribution Tool")
-
-variations_input = st.text_area("Enter variation terms (comma-separated)")
-variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
 user_url = st.text_input("Your Page URL")
 user_file = st.file_uploader("Upload Your Page HTML", type="html", key="user_html")
@@ -23,6 +20,9 @@ if len(competitor_urls) == 10:
     for i, url in enumerate(competitor_urls):
         f = st.file_uploader(f"Competitor {i+1}: {url}", type="html", key=f"comp{i}")
         competitor_files.append(f)
+
+variations_input = st.text_area("Enter variation terms (comma-separated)")
+variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
 
 def extract_tag_texts(html_str):
@@ -42,7 +42,7 @@ def extract_tag_texts(html_str):
 def count_variations(texts, variations):
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?!\w)", flags=re.IGNORECASE)) for v in sorted_vars]
+    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=[\s\.,:;!?\-]|$)", flags=re.IGNORECASE)) for v in sorted_vars]
     for tag in counts:
         for txt in texts[tag]:
             used_spans = []
