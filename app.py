@@ -1,4 +1,4 @@
-# Final Streamlit App (layout with proper URL + staged competitor upload)
+# Final Streamlit App (FULLY FIXED SEO VARIATION MATH)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -43,13 +43,13 @@ def extract_tag_texts(html_str):
 def count_variations(texts, variations):
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    # Match full words/phrases only — allow trailing punctuation after (.,!) and ignore space + dash breaks
-    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=\b|\s|[.,!?;:)]|$)", flags=re.IGNORECASE)) for v in sorted_vars]
+    escaped_vars = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=(\s|[.,!?;:\\)\-]|$))", re.IGNORECASE)) for v in sorted_vars]
+
     for tag in counts:
         for txt in texts[tag]:
             matched_spans = []
             matched_vars = set()
-            for var, pattern in var_patterns:
+            for var, pattern in escaped_vars:
                 for match in pattern.finditer(txt):
                     span = match.span()
                     if var in matched_vars:
@@ -76,7 +76,6 @@ def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
         max_v = int(np.ceil(hi * scale))
         min_v = max(min_v, 0)
         max_v = max(max_v, 0)
-        # force H4 to 0-0 if all competitors had 0
         if tag == "h4" and all(v == 0 for v in counts):
             result[tag] = (0, 0)
         else:
