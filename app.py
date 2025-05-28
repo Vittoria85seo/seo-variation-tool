@@ -1,6 +1,4 @@
-# Final version of the SEO Variation Tool App with fixed benchmark math
-# Preserving original layout and structure
-
+# Final Streamlit App (layout matches original UI exactly)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -10,19 +8,17 @@ from bs4 import BeautifulSoup
 st.set_page_config(layout="wide")
 st.title("SEO Variation Distribution Tool")
 
-st.markdown("### 1. Variation Keywords")
 variations_input = st.text_area("Enter variation terms (comma-separated)")
 variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
-st.markdown("### 2. Upload HTML Files")
-col1, col2 = st.columns(2)
-with col1:
-    user_file = st.file_uploader("Upload Your Page HTML", type="html", key="user_html")
-with col2:
-    competitor_files = []
-    for i in range(10):
-        f = st.file_uploader(f"Competitor {i+1}", type="html", key=f"comp{i}")
-        competitor_files.append(f)
+st.subheader("Upload Your Page HTML")
+user_file = st.file_uploader("Upload HTML", type="html", key="user_html")
+
+st.subheader("Upload Competitor HTMLs (in order)")
+competitor_files = []
+for i in range(10):
+    f = st.file_uploader(f"Competitor {i+1}", type="html", key=f"comp{i}")
+    competitor_files.append(f)
 
 def extract_tag_texts(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
@@ -110,5 +106,6 @@ if user_file and all(competitor_files) and variations:
         "Recommended Min": [ranges[t][0] for t in ["h2", "h3", "h4", "p"]],
         "Recommended Max": [ranges[t][1] for t in ["h2", "h3", "h4", "p"]]
     }
-    st.markdown("### 3. Analysis Result")
+
+    st.subheader("Final Analysis")
     st.dataframe(pd.DataFrame(df_data))
