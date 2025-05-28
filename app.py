@@ -46,19 +46,18 @@ def count_variations(texts, variations):
     var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=\W|$)", flags=re.IGNORECASE)) for v in sorted_vars]
     for tag in counts:
         for txt in texts[tag]:
-            matched = set()
             matched_spans = []
+            matched_vars = set()
             for var, pattern in var_patterns:
                 for match in pattern.finditer(txt):
                     span = match.span()
-                    if var in matched:
+                    if var in matched_vars:
                         continue
-                    # Allow nested variation matches if character spans do not fully overlap
-                    if any(a < span[1] and b > span[0] for a, b in matched_spans):
+                    if span in matched_spans:
                         continue
-                    matched.add(var)
+                    matched_vars.add(var)
                     matched_spans.append(span)
-            counts[tag] += len(matched)
+            counts[tag] += len(matched_vars)
     return counts
 
 
