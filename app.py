@@ -1,27 +1,28 @@
-# Final version of the SEO Variation Tool App with improved benchmark math
-# Includes weighted percentiles and scaled recommendations per tag
+# Final version of the SEO Variation Tool App with fixed benchmark math
+# Preserving original layout and structure
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import re
 from bs4 import BeautifulSoup
-from io import StringIO
 
 st.set_page_config(layout="wide")
 st.title("SEO Variation Distribution Tool")
 
+st.markdown("### 1. Variation Keywords")
 variations_input = st.text_area("Enter variation terms (comma-separated)")
 variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
-st.subheader("Upload Your Page HTML")
-user_file = st.file_uploader("Upload HTML", type="html", key="user_html")
-
-st.subheader("Upload Competitor HTMLs (1–10 in order)")
-competitor_files = []
-for i in range(10):
-    f = st.file_uploader(f"Competitor {i+1}", type="html", key=f"comp{i}")
-    competitor_files.append(f)
+st.markdown("### 2. Upload HTML Files")
+col1, col2 = st.columns(2)
+with col1:
+    user_file = st.file_uploader("Upload Your Page HTML", type="html", key="user_html")
+with col2:
+    competitor_files = []
+    for i in range(10):
+        f = st.file_uploader(f"Competitor {i+1}", type="html", key=f"comp{i}")
+        competitor_files.append(f)
 
 def extract_tag_texts(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
@@ -41,7 +42,6 @@ def count_variations(texts, variations):
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
     var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?!\w)", flags=re.IGNORECASE)) for v in sorted_vars]
-
     for tag in counts:
         for txt in texts[tag]:
             used_spans = []
@@ -101,7 +101,6 @@ if user_file and all(competitor_files) and variations:
 
     avg_comp_wc = np.mean(comp_wcs)
     tag_counts_dict = {tag: [c[tag] for c in comp_counts] for tag in ["h2", "h3", "h4", "p"]}
-
     fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
     ranges = compute_variation_ranges(tag_counts_dict, user_wc, avg_comp_wc, weights=fixed_weights)
 
@@ -111,5 +110,5 @@ if user_file and all(competitor_files) and variations:
         "Recommended Min": [ranges[t][0] for t in ["h2", "h3", "h4", "p"]],
         "Recommended Max": [ranges[t][1] for t in ["h2", "h3", "h4", "p"]]
     }
-    st.subheader("Variation Count Analysis")
+    st.markdown("### 3. Analysis Result")
     st.dataframe(pd.DataFrame(df_data))
