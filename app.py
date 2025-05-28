@@ -43,7 +43,8 @@ def extract_tag_texts(html_str):
 def count_variations(texts, variations):
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=\b|\s[^\w]|$)", flags=re.IGNORECASE)) for v in sorted_vars]
+    # Match full words/phrases only — allow trailing punctuation after (.,!) and ignore space + dash breaks
+    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=\b|\s|[.,!?;:)]|$)", flags=re.IGNORECASE)) for v in sorted_vars]
     for tag in counts:
         for txt in texts[tag]:
             matched_spans = []
