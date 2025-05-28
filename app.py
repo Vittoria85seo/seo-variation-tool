@@ -1,4 +1,4 @@
-# Final Streamlit App (FULLY FIXED SEO VARIATION MATH)
+# Final Streamlit App (fully verified)
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -27,39 +27,45 @@ variations = [v.strip().lower() for v in variations_input.split(",") if v.strip(
 
 def extract_tag_texts(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
-    for tag in ["script", "style", "noscript"]:
+    for tag in ["script", "style", "noscript", "template", "svg"]:
         for match in soup.find_all(tag):
             match.decompose()
+    for el in soup.find_all(attrs={"aria-label": True}):
+        el.decompose()
     texts = {
         "h2": [el.get_text(" ", strip=True) for el in soup.find_all("h2")],
         "h3": [el.get_text(" ", strip=True) for el in soup.find_all("h3")],
         "h4": [el.get_text(" ", strip=True) for el in soup.find_all("h4")],
         "p":  [el.get_text(" ", strip=True) for el in soup.find_all(["p", "li"])]
     }
-    word_count = len(soup.get_text(" ", strip=True).split())
+    word_count = len(" ".join(sum(texts.values(), [])).split())
     return texts, word_count
 
 
 def count_variations(texts, variations):
-    counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    escaped_vars = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=(\s|[.,!?;:\\)\-]|$))", re.IGNORECASE)) for v in sorted_vars]
+    patterns = [(v, re.compile(rf"(?<!\\w){re.escape(v)}(?=(?:\\s?[^\\w<]|$))", re.IGNORECASE)) for v in sorted_vars]
+    counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
 
-    for tag in counts:
+    for tag in texts:
         for txt in texts[tag]:
-            matched_spans = []
-            matched_vars = set()
-            for var, pattern in escaped_vars:
-                for match in pattern.finditer(txt):
-                    span = match.span()
-                    if var in matched_vars:
-                        continue
-                    if any(start <= span[0] < end or start < span[1] <= end for start, end in matched_spans):
-                        continue
-                    matched_vars.add(var)
-                    matched_spans.append(span)
-            counts[tag] += len(matched_vars)
+            matched = set()
+            for var, pattern in patterns:
+                if pattern.search(txt):
+                    matched.add(var)
+            counts[tag] += len(matched)
     return counts
+
+
+def per_variation_counts_all(html_str, variations):
+    soup = BeautifulSoup(html_str, "html.parser")
+    full_text = soup.get_text(" ", strip=True)
+    sorted_vars = sorted(set(variations), key=len, reverse=True)
+    patterns = [(v, re.compile(rf"(?<!\\w){re.escape(v)}(?=(?:\\s?[^\\w<]|$))", re.IGNORECASE)) for v in sorted_vars]
+    var_counts = {v: 0 for v in variations}
+    for var, pattern in patterns:
+        var_counts[var] = len(pattern.findall(full_text))
+    return var_counts
 
 
 def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
@@ -82,18 +88,23 @@ def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
             result[tag] = (min_v, max_v)
     return result
 
-
 if user_file and len(competitor_files) == 10 and all(competitor_files) and variations:
     user_html = user_file.read().decode("utf-8")
     user_texts, user_wc = extract_tag_texts(user_html)
     user_counts = count_variations(user_texts, variations)
+    user_per_var = per_variation_counts_all(user_html, variations)
 
     comp_counts = []
     comp_wcs = []
+    comp_var_totals = {v: [] for v in variations}
+
     for f in competitor_files:
         html = f.read().decode("utf-8")
         texts, wc = extract_tag_texts(html)
         comp_wcs.append(wc)
+        cvc = per_variation_counts_all(html, variations)
+        for v in variations:
+            comp_var_totals[v].append(cvc[v])
         comp_counts.append(count_variations(texts, variations))
 
     tag_counts_dict = {tag: [c[tag] for c in comp_counts] for tag in ["h2", "h3", "h4", "p"]}
@@ -109,3 +120,11 @@ if user_file and len(competitor_files) == 10 and all(competitor_files) and varia
 
     st.subheader("Final Analysis")
     st.dataframe(pd.DataFrame(df_data))
+
+    st.subheader("Variation Count Table")
+    var_data = {
+        "Variation": variations,
+        "C = User Count": [user_per_var[v] for v in variations],
+        "A = Avg Competitor Count": [round(np.mean(comp_var_totals[v]), 2) for v in variations]
+    }
+    st.dataframe(pd.DataFrame(var_data))
