@@ -1,5 +1,5 @@
-# Final version of the SEO Variation Tool App with fixed math integration
-# Incorporates corrected variation counting and tuned range math from benchmark logic
+# Final version of the SEO Variation Tool App with integrated math logic
+# Self-contained version: includes variation counting and weighted range math
 
 import streamlit as st
 import pandas as pd
@@ -52,7 +52,7 @@ def extract_tag_texts(html_str):
 def count_variations(texts, variations):
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    var_patterns = [(v, re.compile(rf"(?<!\\w){re.escape(v)}(?!\\w)", flags=re.IGNORECASE)) for v in sorted_vars]
+    var_patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?!\w)", flags=re.IGNORECASE)) for v in sorted_vars]
 
     for tag in counts:
         for txt in texts[tag]:
@@ -68,6 +68,38 @@ def count_variations(texts, variations):
                     break
             counts[tag] += len(matched)
     return counts
+
+# -------------------------------
+# Math Logic for Range Calculation
+# -------------------------------
+def weighted_percentile(data, weights, percentiles):
+    data, weights = np.array(data), np.array(weights)
+    sorter = np.argsort(data)
+    data_sorted = data[sorter]
+    weights_sorted = weights[sorter]
+    cum_weights = np.cumsum(weights_sorted)
+    total = cum_weights[-1]
+    percentile_values = []
+    for p in percentiles:
+        cutoff = total * (p / 100.0)
+        idx = np.searchsorted(cum_weights, cutoff)
+        idx = min(len(data_sorted) - 1, idx)
+        percentile_values.append(data_sorted[idx])
+    return percentile_values
+
+def compute_variation_ranges(tag_counts_dict, user_wc, avg_wc, weights):
+    result = {}
+    scale = user_wc / avg_wc if avg_wc else 1.0
+    for tag, counts in tag_counts_dict.items():
+        min_v, max_v = weighted_percentile(counts, weights, [10, 90])
+        if tag == "p":
+            min_adj = int(np.floor(min_v * scale))
+            max_adj = int(np.ceil(max_v * scale))
+        else:
+            min_adj = int(np.floor(min_v))
+            max_adj = int(np.ceil(max_v))
+        result[tag] = (min_adj, max_adj)
+    return result
 
 # -------------------------------
 # Collect Data
@@ -86,15 +118,10 @@ if user_file and all(competitor_files) and variations:
         comp_counts.append(count_variations(texts, variations))
 
     avg_comp_wc = np.mean(comp_wcs)
-
-    # Organize data
     tag_counts_dict = {tag: [c[tag] for c in comp_counts] for tag in ["h2", "h3", "h4", "p"]}
 
-    # -------------------------------
-    # Compute Ranges
-    # -------------------------------
-    from Seo_Variation_Math_Fix import compute_variation_ranges  # canvas import
-    ranges = compute_variation_ranges(tag_counts_dict, user_wc, avg_comp_wc)
+    fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
+    ranges = compute_variation_ranges(tag_counts_dict, user_wc, avg_comp_wc, weights=fixed_weights)
 
     # -------------------------------
     # Display Output
