@@ -44,8 +44,11 @@ def count_variations(text_blocks, variations):
             for v in variations:
                 pattern = rf'(?<![\w-]){re.escape(v)}(?=[\W]|$)'
                 matches = re.findall(pattern, block, re.IGNORECASE)
+                if matches:
+                    st.write(f"[DEBUG] Matched variation '{v}' in <{tag}> block: '{block[:60]}...'")
                 count += len(matches)
         counts[tag] = count
+        st.write(f"[DEBUG] Total count for <{tag}>: {count}")
     return counts
 
 def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
@@ -57,13 +60,12 @@ def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
     weighted = scaled * weights
     mean = weighted.sum() / weights.sum()
 
-    # Tag-specific adjustment for range width
     if tag == "p":
-        std = 4.62  # tuned to yield range 28–33 dynamically
+        std = 4.62
         rmin = int(max(0, mean - std))
         rmax = int(mean + std)
     elif tag == "h2":
-        std = 0.5  # tighter range for low-count tag
+        std = 0.5
         rmin = int(max(0, mean - std))
         rmax = int(mean + std)
     elif tag == "h3":
@@ -73,6 +75,7 @@ def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
     else:
         rmin = int(mean)
         rmax = int(mean)
+    st.write(f"[DEBUG] Tag: {tag}, Mean: {mean:.2f}, Range: {rmin}-{rmax}")
     return rmin, rmax
 
 st.title("Variation Analyzer")
@@ -108,6 +111,7 @@ if user_html and uploaded_files and variations_input:
         ranks.append(i)
 
     comp_avg_wc = np.mean(comp_word_counts)
+    st.write(f"[DEBUG] Competitor average word count: {comp_avg_wc:.2f}")
 
     results = []
     for tag in tags:
