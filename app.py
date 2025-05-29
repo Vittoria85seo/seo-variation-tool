@@ -8,11 +8,11 @@ from io import StringIO
 st.set_page_config(layout="centered")
 st.title("🔍 SEO Variation Analyzer")
 
-st.markdown("### 🧩 Your Page Info")
+st.markdown("### 🧹 Your Page Info")
 user_url = st.text_input("User Page URL:")
 user_html = st.file_uploader("Upload your HTML file (User Page):", type=["html"])
 
-st.markdown("### 📥 Competitor URLs")
+st.markdown("### 📅 Competitor URLs")
 competitor_url_list = st.text_area("Paste list of 10 competitor URLs (one per line):")
 
 comp_urls = [url.strip() for url in competitor_url_list.strip().splitlines() if url.strip()][:10]
@@ -29,6 +29,7 @@ if comp_urls:
 variations_input = st.text_area("📋 Paste variation list (comma-separated):")
 tags = ["h2", "h3", "h4", "p"]
 
+
 def extract_text_by_tag(html_str, tags):
     soup = BeautifulSoup(html_str, "html.parser")
     for tag in ["script", "style", "noscript", "template", "svg"]:
@@ -43,6 +44,7 @@ def extract_text_by_tag(html_str, tags):
             if text:
                 text_blocks[tag].append(text)
     return text_blocks
+
 
 def get_body_nav_word_count(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
@@ -59,6 +61,7 @@ def get_body_nav_word_count(html_str):
                 texts.append(t)
     return len(" ".join(texts).split())
 
+
 def count_variations(text_blocks, variations):
     counts = {}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
@@ -73,6 +76,7 @@ def count_variations(text_blocks, variations):
             tag_count += len(matched_vars)
         counts[tag] = tag_count
     return counts
+
 
 def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
     arr = np.array(arr)
@@ -151,7 +155,7 @@ if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
     st.download_button("⬇️ Download Full Competitor Data", data=df_comp.to_csv(index=False), file_name="competitor_data.csv")
     st.download_button("⬇️ Download Range Summary", data=df.to_csv(index=False), file_name="range_analysis.csv")
 
-    with st.expander("🐞 Debug Info"):
+    with st.expander("🔞 Debug Info"):
         st.write("User Counts:", user_counts)
         st.write("Competitor Word Counts:", comp_word_counts)
         st.write("Competitor Counts:", comp_counts)
@@ -160,3 +164,5 @@ if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
         st.write("Variations Used:", variations)
         st.write("Extracted Blocks Per Competitor:", debug_blocks)
         st.write("User Text Blocks:", user_text)
+        st.write("Raw HTML Length:", len(user_html_str))
+        st.write("First 300 chars of User HTML:", user_html_str[:300])
