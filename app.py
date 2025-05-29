@@ -6,7 +6,7 @@ import numpy as np
 from io import StringIO
 
 def extract_text_by_tag(html_str, tags):
-    soup = BeautifulSoup(html, "html.parser")
+    soup = BeautifulSoup(html_str, "html.parser")
     for tag in ["script", "style", "noscript", "template", "svg"]:
         for el in soup.find_all(tag):
             el.decompose()
@@ -37,14 +37,17 @@ def get_body_nav_word_count(html_str):
 
 def count_variations(text_blocks, variations):
     counts = {}
+    sorted_vars = sorted(set(variations), key=len, reverse=True)
+    patterns = [(v, re.compile(rf"(?<![\\w-]){re.escape(v)}(?=[\\W]|$)", re.IGNORECASE)) for v in sorted_vars]
     for tag, blocks in text_blocks.items():
-        count = 0
+        tag_count = 0
         for block in blocks:
-            for v in variations:
-                pattern = rf'(?<![\w-]){re.escape(v)}(?=[\W]|$)'
-                matches = re.findall(pattern, block, re.IGNORECASE)
-                count += len(matches)
-        counts[tag] = count
+            matched_vars = set()
+            for v, pattern in patterns:
+                if pattern.search(block):
+                    matched_vars.add(v)
+            tag_count += len(matched_vars)
+        counts[tag] = tag_count
     return counts
 
 def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
