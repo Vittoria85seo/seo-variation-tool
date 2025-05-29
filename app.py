@@ -22,7 +22,7 @@ if comp_urls:
     for i, url in enumerate(comp_urls):
         uploaded = st.file_uploader(f"Upload Competitor {i+1} ({url}) HTML:", type=["html"], key=f"comp{i}")
         if uploaded:
-            comp_codes.append(uploaded.read().decode("utf-8"))
+            comp_codes.append(uploaded.read().decode("utf-8", errors="replace"))
         else:
             comp_codes.append("")
 
@@ -94,7 +94,7 @@ def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
     return rmin, rmax
 
 if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
-    user_html_str = user_html.read().decode("utf-8")
+    user_html_str = user_html.read().decode("utf-8", errors="replace")
     variations = [v.strip() for v in variations_input.split(",") if v.strip()]
     user_text = extract_text_by_tag(user_html_str, tags)
     user_counts = count_variations(user_text, variations)
@@ -111,10 +111,13 @@ if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
     ranks = []
     competitor_data = []
 
+    debug_blocks = {}
+
     for i, html in enumerate(comp_codes):
         if not html.strip():
             continue
         comp_text = extract_text_by_tag(html, tags)
+        debug_blocks[f"Competitor {i+1}"] = comp_text
         comp_wc = get_body_nav_word_count(html)
         comp_word_counts.append(comp_wc)
         comp_variations = count_variations(comp_text, variations)
@@ -155,3 +158,5 @@ if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
         st.write("Ranks:", ranks)
         st.write("Avg Competitor Word Count:", comp_avg_wc)
         st.write("Variations Used:", variations)
+        st.write("Extracted Blocks Per Competitor:", debug_blocks)
+        st.write("User Text Blocks:", user_text)
