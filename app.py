@@ -44,35 +44,33 @@ def count_variations(text_blocks, variations):
             for v in variations:
                 pattern = rf'(?<![\w-]){re.escape(v)}(?=[\W]|$)'
                 matches = re.findall(pattern, block, re.IGNORECASE)
+                if matches:
+                    st.write(f"[DEBUG] Matched variation '{v}' in <{tag}> block: '{block[:60]}...'")
                 count += len(matches)
         counts[tag] = count
+        st.write(f"[DEBUG] Total count for <{tag}>: {count}")
     return counts
 
 def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
     arr = np.array(arr)
     ranks = np.array(ranks)
     weights = (11 - ranks) ** 2
-    raw_avg = np.average(arr, weights=weights)
     scaled = arr * (user_wc / comp_avg_wc)
     weighted = scaled * weights
     mean = weighted.sum() / weights.sum()
 
-    # Tag-specific adjustment for range width
     if tag == "p":
-        std = 4.62  # tuned to yield range 28–33 dynamically
-        rmin = int(max(0, mean - std))
-        rmax = int(mean + std)
+        std = 4.62
     elif tag == "h2":
-        std = 0.5  # tighter range for low-count tag
-        rmin = int(max(0, mean - std))
-        rmax = int(mean + std)
+        std = 0.5
     elif tag == "h3":
         std = 1.5
-        rmin = int(max(0, mean - std))
-        rmax = int(mean + std)
     else:
-        rmin = int(mean)
-        rmax = int(mean)
+        std = 0
+
+    rmin = int(max(0, mean - std))
+    rmax = int(mean + std)
+    st.write(f"[DEBUG] Tag: {tag}, Mean: {mean:.2f}, Range: {rmin}-{rmax}")
     return rmin, rmax
 
 st.title("Variation Analyzer")
@@ -89,25 +87,32 @@ if user_html and uploaded_files and variations_input:
     user_counts = count_variations(user_text, variations)
     user_wc = get_body_nav_word_count(user_html)
 
-    st.write("Verified Counts:")
+    st.subheader("✅ Verified User Counts")
     for tag in tags:
-        st.write(f"{tag.upper()}: {user_counts.get(tag, 0)}")
+        st.markdown(f"- **{tag.upper()}**: {user_counts.get(tag, 0)}")
 
     comp_counts = {tag: [] for tag in tags}
     comp_word_counts = []
     ranks = []
 
+    st.subheader("📦 Competitor Breakdown")
     for i, file in enumerate(uploaded_files):
         html = file.read().decode("utf-8")
         comp_text = extract_text_by_tag(html, tags)
         comp_wc = get_body_nav_word_count(html)
         comp_word_counts.append(comp_wc)
         comp_variations = count_variations(comp_text, variations)
-        for tag in tags:
-            comp_counts[tag].append(comp_variations.get(tag, 0))
+
+        with st.expander(f"Competitor {i+1}: {file.name}"):
+            st.markdown(f"- **Word Count**: {comp_wc}")
+            for tag in tags:
+                val = comp_variations.get(tag, 0)
+                st.markdown(f"- **{tag.upper()}**: {val}")
+                comp_counts[tag].append(val)
         ranks.append(i)
 
     comp_avg_wc = np.mean(comp_word_counts)
+    st.write(f"[DEBUG] Competitor average word count: {comp_avg_wc:.2f}")
 
     results = []
     for tag in tags:
@@ -120,5 +125,6 @@ if user_html and uploaded_files and variations_input:
             "In Range": rmin <= user_counts.get(tag, 0) <= rmax
         })
 
+    st.subheader("📊 Final Range Analysis")
     df = pd.DataFrame(results)
     st.dataframe(df)
