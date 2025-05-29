@@ -1,166 +1,136 @@
 import streamlit as st
-import re
-from bs4 import BeautifulSoup
 import pandas as pd
 import numpy as np
-from io import StringIO
+import re
+from bs4 import BeautifulSoup
 
 st.set_page_config(layout="centered")
-st.title("🔍 SEO Variation Analyzer")
+st.title("SEO Variation Distribution Tool")
 
-st.markdown("### 🦩 Your Page Info")
-user_url = st.text_input("User Page URL:")
-user_html = st.file_uploader("Upload your HTML file (User Page):", type=["html"])
+user_url = st.text_input("Your Page URL")
+user_file = st.file_uploader("Upload Your Page HTML", type="html", key="user_html")
 
-st.markdown("### 📅 Competitor URLs")
-competitor_url_list = st.text_area("Paste list of 10 competitor URLs (one per line):")
+competitor_urls_input = st.text_area("Enter Top 10 Competitor URLs (one per line)")
+competitor_urls = [u.strip() for u in competitor_urls_input.strip().splitlines() if u.strip()]
 
-comp_urls = [url.strip() for url in competitor_url_list.strip().splitlines() if url.strip()][:10]
-comp_codes = []
-if comp_urls:
-    st.markdown("### 📝 Upload HTML code for each Competitor:")
-    for i, url in enumerate(comp_urls):
-        uploaded = st.file_uploader(f"Upload Competitor {i+1} ({url}) HTML:", type=["html"], key=f"comp{i}")
-        if uploaded:
-            comp_codes.append(uploaded.read().decode("utf-8", errors="replace"))
-        else:
-            comp_codes.append("")
+competitor_files = []
+if len(competitor_urls) == 10:
+    st.subheader("Upload Corresponding Competitor HTML Files (in order of URLs above)")
+    for i, url in enumerate(competitor_urls):
+        f = st.file_uploader(f"Competitor {i+1}: {url}", type="html", key=f"comp{i}")
+        competitor_files.append(f)
 
-variations_input = st.text_area("📋 Paste variation list (comma-separated):")
-tags = ["h2", "h3", "h4", "p"]
+variations_input = st.text_area("Enter variation terms (comma-separated)")
+variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
-def extract_text_by_tag(html_str, tags):
+
+def extract_tag_texts(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
     for tag in ["script", "style", "noscript", "template", "svg"]:
-        for el in soup.find_all(tag):
-            el.decompose()
+        for match in soup.find_all(tag):
+            match.decompose()
     for el in soup.find_all(attrs={"aria-label": True}):
         el.decompose()
-    text_blocks = {tag: [] for tag in tags}
-    for tag in tags:
-        for el in soup.find_all(tag):
-            text = el.get_text(" ", strip=True)
-            if text:
-                text_blocks[tag].append(text)
-    return text_blocks
+    texts = {
+        "h2": [el.get_text(" ", strip=True) for el in soup.find_all("h2")],
+        "h3": [el.get_text(" ", strip=True) for el in soup.find_all("h3")],
+        "h4": [el.get_text(" ", strip=True) for el in soup.find_all("h4")],
+        "p":  [el.get_text(" ", strip=True) for el in soup.find_all(["p", "li"])]
+    }
+    word_count = len(" ".join(sum(texts.values(), [])).split())
+    return texts, word_count
 
-def get_body_nav_word_count(html_str):
-    soup = BeautifulSoup(html_str, "html.parser")
-    for tag in ["script", "style", "noscript", "template", "svg"]:
-        for el in soup.find_all(tag):
-            el.decompose()
-    for el in soup.find_all(attrs={"aria-label": True}):
-        el.decompose()
-    texts = []
-    for tag in ["body", "nav"]:
-        for el in soup.find_all(tag):
-            t = el.get_text(" ", strip=True)
-            if t:
-                texts.append(t)
-    return len(" ".join(texts).split())
 
-def count_variations(text_blocks, variations):
-    counts = {}
+def count_variations(texts, variations):
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    patterns = [(v, re.compile(rf"(?<![\\w-]){re.escape(v)}(?=[\\W]|$)", re.IGNORECASE)) for v in sorted_vars]
-    detailed_debug = {}
-    for tag, blocks in text_blocks.items():
-        tag_count = 0
-        debug_list = []
-        for block in blocks:
-            matched_vars = set()
-            for v, pattern in patterns:
-                if pattern.search(block):
-                    matched_vars.add(v)
-            tag_count += len(matched_vars)
-            debug_list.append({"text": block, "matches": list(matched_vars)})
-        counts[tag] = tag_count
-        detailed_debug[tag] = debug_list
-    return counts, detailed_debug
+    patterns = [(v, re.compile(rf"(?<!\\w){re.escape(v)}(?=(?:\\s?[^\\w<]|$))", re.IGNORECASE)) for v in sorted_vars]
+    counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
 
-def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
-    arr = np.array(arr)
-    ranks = np.array(ranks)
-    weights = (11 - ranks) ** 2
-    scaled = arr * (user_wc / comp_avg_wc)
-    weighted = scaled * weights
-    mean = weighted.sum() / weights.sum()
-    if tag == "p":
-        std = 2.7
-    elif tag == "h2":
-        std = 0.5
-    elif tag == "h3":
-        std = 1.5
-    else:
-        std = 0
-    rmin = int(max(0, mean - std))
-    rmax = int(mean + std)
-    return rmin, rmax
+    for tag in texts:
+        for txt in texts[tag]:
+            matched = set()
+            for var, pattern in patterns:
+                if pattern.search(txt):
+                    matched.add(var)
+            counts[tag] += len(matched)
+    return counts
 
-if user_html:
-    raw_html = user_html.read()
-    user_html_str = raw_html.decode("utf-8", errors="replace")
 
-    if len(comp_codes) == 10 and all(comp_codes) and variations_input:
-        variations = [v.strip() for v in variations_input.split(",") if v.strip()]
-        user_text = extract_text_by_tag(user_html_str, tags)
-        user_counts, user_debug = count_variations(user_text, variations)
-        user_wc = get_body_nav_word_count(user_html_str)
+def per_variation_counts_all(html_str, variations):
+    soup = BeautifulSoup(html_str, "html.parser")
+    full_text = soup.get_text(" ", strip=True)
+    sorted_vars = sorted(set(variations), key=len, reverse=True)
+    patterns = [(v, re.compile(rf"(?<!\\w){re.escape(v)}(?=(?:\\s?[^\\w<]|$))", re.IGNORECASE)) for v in sorted_vars]
+    var_counts = {v: 0 for v in variations}
+    for var, pattern in patterns:
+        var_counts[var] = len(pattern.findall(full_text))
+    return var_counts
 
-        st.header("📌 User Page Analysis")
-        st.markdown(f"**User Word Count (Body+Nav):** {user_wc}")
-        user_stats = {tag.upper(): user_counts.get(tag, 0) for tag in tags}
-        st.dataframe(pd.DataFrame([user_stats]))
 
-        st.header("📦 Competitor Pages Analysis")
-        comp_counts = {tag: [] for tag in tags}
-        comp_word_counts = []
-        ranks = []
-        competitor_data = []
-        all_debugs = []
+def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
+    result = {}
+    avg_wc = np.average(comp_wcs, weights=weights)
+    scale = user_wc / avg_wc if avg_wc else 1.0
+    for tag, counts in tag_counts_dict.items():
+        weighted_avg = np.average(counts, weights=weights)
+        stddev = np.sqrt(np.average((np.array(counts) - weighted_avg) ** 2, weights=weights))
+        spread = 0.15 if tag == "p" else 0.25
+        lo = weighted_avg - spread * stddev
+        hi = weighted_avg + spread * stddev
+        min_v = int(np.floor(lo * scale))
+        max_v = int(np.ceil(hi * scale))
+        min_v = max(min_v, 0)
+        max_v = max(max_v, 0)
+        if tag == "h4" and all(v == 0 for v in counts):
+            result[tag] = (0, 0)
+        else:
+            result[tag] = (min_v, max_v)
+    return result
 
-        for i, html in enumerate(comp_codes):
-            if not html.strip():
-                continue
-            comp_text = extract_text_by_tag(html, tags)
-            comp_wc = get_body_nav_word_count(html)
-            comp_word_counts.append(comp_wc)
-            comp_variations, comp_debug = count_variations(comp_text, variations)
-            ranks.append(i + 1)
-            row = {"Competitor": f"Competitor {i+1}", "Word Count": comp_wc}
-            for tag in tags:
-                row[tag.upper()] = comp_variations.get(tag, 0)
-                comp_counts[tag].append(comp_variations.get(tag, 0))
-            competitor_data.append(row)
-            all_debugs.append({"Competitor": f"Competitor {i+1}", "debug": comp_debug})
+# MAIN EXECUTION
+if user_file and len(competitor_files) == 10 and all(competitor_files) and variations:
+    try:
+        user_html_bytes = user_file.read()
+        user_html = user_html_bytes.decode("utf-8", errors="replace")
+        user_texts, user_wc = extract_tag_texts(user_html)
+        user_counts = count_variations(user_texts, variations)
+        user_per_var = per_variation_counts_all(user_html, variations)
 
-        df_comp = pd.DataFrame(competitor_data)
-        st.dataframe(df_comp)
+        comp_counts = []
+        comp_wcs = []
+        comp_var_totals = {v: [] for v in variations}
 
-        comp_avg_wc = np.mean(comp_word_counts)
+        for i, f in enumerate(competitor_files):
+            html = f.read().decode("utf-8", errors="replace")
+            texts, wc = extract_tag_texts(html)
+            comp_wcs.append(wc)
+            cvc = per_variation_counts_all(html, variations)
+            for v in variations:
+                comp_var_totals[v].append(cvc[v])
+            comp_counts.append(count_variations(texts, variations))
 
-        results = []
-        for tag in tags:
-            rmin, rmax = soft_weighted_range(comp_counts[tag], ranks, user_wc, comp_avg_wc, tag)
-            results.append({
-                "Tag": tag.upper(),
-                "Your Count": user_counts.get(tag, 0),
-                "Scaled Min": rmin,
-                "Scaled Max": rmax,
-                "In Range": rmin <= user_counts.get(tag, 0) <= rmax
-            })
+        tag_counts_dict = {tag: [c[tag] for c in comp_counts] for tag in ["h2", "h3", "h4", "p"]}
+        fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
+        ranges = benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, fixed_weights)
 
-        st.header("📊 Final Range Comparison")
-        df = pd.DataFrame(results)
-        st.dataframe(df)
+        df_data = {
+            "Tag": ["H2", "H3", "H4", "P"],
+            "Your Count": [user_counts[t] for t in ["h2", "h3", "h4", "p"]],
+            "Recommended Min": [ranges[t][0] for t in ["h2", "h3", "h4", "p"]],
+            "Recommended Max": [ranges[t][1] for t in ["h2", "h3", "h4", "p"]]
+        }
 
-        st.download_button("⬇️ Download Full Competitor Data", data=df_comp.to_csv(index=False), file_name="competitor_data.csv")
-        st.download_button("⬇️ Download Range Summary", data=df.to_csv(index=False), file_name="range_analysis.csv")
+        st.subheader("Final Analysis")
+        st.dataframe(pd.DataFrame(df_data))
 
-        with st.expander("🧾 Debug Breakdown - User Block Matches"):
-            for tag in tags:
-                st.markdown(f"#### Tag: {tag.upper()}")
-                for entry in user_debug.get(tag, []):
-                    st.markdown(f"- **Text:** {entry['text'][:100]}... → **Matches:** {entry['matches']}")
+        st.subheader("Variation Count Table")
+        var_data = {
+            "Variation": variations,
+            "C = User Count": [user_per_var[v] for v in variations],
+            "A = Avg Competitor Count": [round(np.mean(comp_var_totals[v]), 2) for v in variations]
+        }
+        st.dataframe(pd.DataFrame(var_data))
 
-        st.download_button("⬇️ Download Debug JSON", data=pd.DataFrame(all_debugs).to_json(), file_name="debug_output.json")
+    except Exception as e:
+        st.error(f"Error during processing: {str(e)}")
+        st.stop()
