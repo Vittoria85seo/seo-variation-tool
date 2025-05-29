@@ -147,3 +147,11 @@ if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
 
     st.download_button("⬇️ Download Full Competitor Data", data=df_comp.to_csv(index=False), file_name="competitor_data.csv")
     st.download_button("⬇️ Download Range Summary", data=df.to_csv(index=False), file_name="range_analysis.csv")
+
+    with st.expander("🐞 Debug Info"):
+        st.write("User Counts:", user_counts)
+        st.write("Competitor Word Counts:", comp_word_counts)
+        st.write("Competitor Counts:", comp_counts)
+        st.write("Ranks:", ranks)
+        st.write("Avg Competitor Word Count:", comp_avg_wc)
+        st.write("Variations Used:", variations)
