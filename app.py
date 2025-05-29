@@ -5,6 +5,30 @@ import pandas as pd
 import numpy as np
 from io import StringIO
 
+st.set_page_config(layout="centered")
+st.title("🔍 SEO Variation Analyzer")
+
+st.markdown("### 🧩 Your Page Info")
+user_url = st.text_input("User Page URL:")
+user_html = st.file_uploader("Upload your HTML file (User Page):", type=["html"])
+
+st.markdown("### 📥 Competitor URLs")
+competitor_url_list = st.text_area("Paste list of 10 competitor URLs (one per line):")
+
+comp_urls = [url.strip() for url in competitor_url_list.strip().splitlines() if url.strip()][:10]
+comp_codes = []
+if comp_urls:
+    st.markdown("### 📝 Upload HTML code for each Competitor:")
+    for i, url in enumerate(comp_urls):
+        uploaded = st.file_uploader(f"Upload Competitor {i+1} ({url}) HTML:", type=["html"], key=f"comp{i}")
+        if uploaded:
+            comp_codes.append(uploaded.read().decode("utf-8"))
+        else:
+            comp_codes.append("")
+
+variations_input = st.text_area("📋 Paste variation list (comma-separated):")
+tags = ["h2", "h3", "h4", "p"]
+
 def extract_text_by_tag(html_str, tags):
     soup = BeautifulSoup(html_str, "html.parser")
     for tag in ["script", "style", "noscript", "template", "svg"]:
@@ -69,32 +93,12 @@ def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
     rmax = int(mean + std)
     return rmin, rmax
 
-st.set_page_config(layout="centered")
-st.title("🔍 SEO Variation Analyzer")
-
-st.markdown("### 🧩 Your Page Info")
-user_url = st.text_input("User Page URL:")
-user_html = st.text_area("Paste your HTML code (User Page):", height=300)
-
-st.markdown("### 📥 Competitor URLs")
-competitor_url_list = st.text_area("Paste list of 10 competitor URLs (one per line):")
-
-comp_urls = [url.strip() for url in competitor_url_list.strip().splitlines() if url.strip()][:10]
-comp_codes = []
-if comp_urls:
-    st.markdown("### 📝 Paste HTML code for each Competitor:")
-    for i, url in enumerate(comp_urls):
-        html_code = st.text_area(f"Competitor {i+1} ({url}) HTML Code:", height=200, key=f"cc{i}")
-        comp_codes.append(html_code)
-
-variations_input = st.text_area("📋 Paste variation list (comma-separated):")
-tags = ["h2", "h3", "h4", "p"]
-
 if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
+    user_html_str = user_html.read().decode("utf-8")
     variations = [v.strip() for v in variations_input.split(",") if v.strip()]
-    user_text = extract_text_by_tag(user_html, tags)
+    user_text = extract_text_by_tag(user_html_str, tags)
     user_counts = count_variations(user_text, variations)
-    user_wc = get_body_nav_word_count(user_html)
+    user_wc = get_body_nav_word_count(user_html_str)
 
     st.header("📌 User Page Analysis")
     st.markdown(f"**User Word Count (Body+Nav):** {user_wc}")
