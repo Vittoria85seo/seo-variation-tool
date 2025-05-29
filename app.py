@@ -6,7 +6,7 @@ import numpy as np
 from io import StringIO
 
 def extract_text_by_tag(html_str, tags):
-    soup = BeautifulSoup(html_str, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
     for tag in ["script", "style", "noscript", "template", "svg"]:
         for el in soup.find_all(tag):
             el.decompose()
@@ -43,11 +43,8 @@ def count_variations(text_blocks, variations):
             for v in variations:
                 pattern = rf'(?<![\w-]){re.escape(v)}(?=[\W]|$)'
                 matches = re.findall(pattern, block, re.IGNORECASE)
-                if matches:
-                    st.write(f"[DEBUG] Matched variation '{v}' in <{tag}> block: '{block[:60]}...'")
                 count += len(matches)
         counts[tag] = count
-        st.write(f"[DEBUG] Total count for <{tag}>: {count}")
     return counts
 
 def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
@@ -67,35 +64,33 @@ def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
         std = 0
     rmin = int(max(0, mean - std))
     rmax = int(mean + std)
-    st.write(f"[DEBUG] Tag: {tag}, Mean: {mean:.2f}, Range: {rmin}-{rmax}")
     return rmin, rmax
 
-st.title("🔍 Variation Analyzer")
+st.set_page_config(layout="wide")
+st.title("🔍 SEO Variation Analyzer")
 
-user_html = st.text_area("Paste your HTML here:", height=300)
-variations_input = st.text_area("Paste variation list (comma-separated):")
-uploaded_files = st.file_uploader("Upload competitor HTML files", type="html", accept_multiple_files=True)
+user_col, comp_col = st.columns(2)
+
+with user_col:
+    user_html = st.text_area("Paste your HTML here (User Page):", height=300)
+    variations_input = st.text_area("Paste variation list (comma-separated):")
+    tags = ["h2", "h3", "h4", "p"]
+
+with comp_col:
+    uploaded_files = st.file_uploader("Upload Competitor HTML Files:", type="html", accept_multiple_files=True)
 
 if user_html and uploaded_files and variations_input:
     variations = [v.strip() for v in variations_input.split(",") if v.strip()]
-    tags = ["h2", "h3", "h4", "p"]
-
-    st.header("📌 User Page Analysis")
     user_text = extract_text_by_tag(user_html, tags)
     user_counts = count_variations(user_text, variations)
     user_wc = get_body_nav_word_count(user_html)
-    st.markdown(f"**User Word Count:** {user_wc}")
 
-    st.markdown("**Tag Counts:**")
-    col1, col2 = st.columns(2)
-    with col1:
-        for tag in tags[:2]:
-            st.markdown(f"- **{tag.upper()}**: {user_counts.get(tag, 0)}")
-    with col2:
-        for tag in tags[2:]:
-            st.markdown(f"- **{tag.upper()}**: {user_counts.get(tag, 0)}")
+    st.header("📌 User Page Analysis")
+    st.markdown(f"**User Word Count (Body+Nav):** {user_wc}")
+    user_stats = {tag.upper(): user_counts.get(tag, 0) for tag in tags}
+    st.dataframe(pd.DataFrame([user_stats]))
 
-    st.header("📦 Competitor Analysis")
+    st.header("📦 Competitor Pages Analysis")
     comp_counts = {tag: [] for tag in tags}
     comp_word_counts = []
     ranks = []
@@ -107,22 +102,17 @@ if user_html and uploaded_files and variations_input:
         comp_wc = get_body_nav_word_count(html)
         comp_word_counts.append(comp_wc)
         comp_variations = count_variations(comp_text, variations)
-        ranks.append(i)
-        row = {
-            "Competitor": file.name,
-            "Word Count": comp_wc
-        }
+        ranks.append(i + 1)
+        row = {"Competitor": file.name, "Word Count": comp_wc}
         for tag in tags:
-            val = comp_variations.get(tag, 0)
-            comp_counts[tag].append(val)
-            row[tag.upper()] = val
+            row[tag.upper()] = comp_variations.get(tag, 0)
+            comp_counts[tag].append(comp_variations.get(tag, 0))
         competitor_data.append(row)
 
     df_comp = pd.DataFrame(competitor_data)
     st.dataframe(df_comp)
 
     comp_avg_wc = np.mean(comp_word_counts)
-    st.write(f"[DEBUG] Competitor average word count: {comp_avg_wc:.2f}")
 
     results = []
     for tag in tags:
@@ -135,9 +125,9 @@ if user_html and uploaded_files and variations_input:
             "In Range": rmin <= user_counts.get(tag, 0) <= rmax
         })
 
-    st.header("📊 Final Range Analysis")
+    st.header("📊 Final Range Comparison")
     df = pd.DataFrame(results)
     st.dataframe(df)
 
-    st.download_button("Download Range Data", data=df.to_csv(index=False), file_name="range_analysis.csv")
-    st.download_button("Download Competitor Raw Data", data=df_comp.to_csv(index=False), file_name="competitor_data.csv")
+    st.download_button("⬇️ Download Full Competitor Data", data=df_comp.to_csv(index=False), file_name="competitor_data.csv")
+    st.download_button("⬇️ Download Range Summary", data=df.to_csv(index=False), file_name="range_analysis.csv")
