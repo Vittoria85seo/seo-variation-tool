@@ -72,17 +72,27 @@ def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
 st.set_page_config(layout="wide")
 st.title("🔍 SEO Variation Analyzer")
 
-user_col, comp_col = st.columns(2)
+url_col, code_col = st.columns([1, 3])
 
-with user_col:
-    user_html = st.text_area("Paste your HTML here (User Page):", height=300)
-    variations_input = st.text_area("Paste variation list (comma-separated):")
-    tags = ["h2", "h3", "h4", "p"]
+with url_col:
+    st.markdown("### 🧩 Your Page Info")
+    user_url = st.text_input("User Page URL:")
+    comp_urls = []
+    for i in range(10):
+        url = st.text_input(f"Competitor {i+1} URL:", key=f"cu{i}")
+        comp_urls.append(url)
 
-with comp_col:
-    uploaded_files = st.file_uploader("Upload Competitor HTML Files:", type="html", accept_multiple_files=True)
+with code_col:
+    user_html = st.text_area("Paste your HTML code (User Page):", height=300)
+    comp_codes = []
+    for i in range(10):
+        code = st.text_area(f"Paste HTML code for Competitor {i+1}:", height=200, key=f"cc{i}")
+        comp_codes.append(code)
 
-if user_html and uploaded_files and variations_input:
+variations_input = st.text_area("Paste variation list (comma-separated):")
+tags = ["h2", "h3", "h4", "p"]
+
+if user_html and all(comp_codes) and variations_input:
     variations = [v.strip() for v in variations_input.split(",") if v.strip()]
     user_text = extract_text_by_tag(user_html, tags)
     user_counts = count_variations(user_text, variations)
@@ -99,14 +109,15 @@ if user_html and uploaded_files and variations_input:
     ranks = []
     competitor_data = []
 
-    for i, file in enumerate(uploaded_files):
-        html = file.read().decode("utf-8")
+    for i, html in enumerate(comp_codes):
+        if not html.strip():
+            continue
         comp_text = extract_text_by_tag(html, tags)
         comp_wc = get_body_nav_word_count(html)
         comp_word_counts.append(comp_wc)
         comp_variations = count_variations(comp_text, variations)
         ranks.append(i + 1)
-        row = {"Competitor": file.name, "Word Count": comp_wc}
+        row = {"Competitor": f"Competitor {i+1}", "Word Count": comp_wc}
         for tag in tags:
             row[tag.upper()] = comp_variations.get(tag, 0)
             comp_counts[tag].append(comp_variations.get(tag, 0))
