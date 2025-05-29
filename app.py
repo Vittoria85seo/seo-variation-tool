@@ -8,11 +8,11 @@ from io import StringIO
 st.set_page_config(layout="centered")
 st.title("🔍 SEO Variation Analyzer")
 
-st.markdown("### 🧩 Your Page Info")
+st.markdown("### 🦩 Your Page Info")
 user_url = st.text_input("User Page URL:")
 user_html = st.file_uploader("Upload your HTML file (User Page):", type=["html"])
 
-st.markdown("### 📥 Competitor URLs")
+st.markdown("### 📅 Competitor URLs")
 competitor_url_list = st.text_area("Paste list of 10 competitor URLs (one per line):")
 
 comp_urls = [url.strip() for url in competitor_url_list.strip().splitlines() if url.strip()][:10]
@@ -90,7 +90,7 @@ def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
     weighted = scaled * weights
     mean = weighted.sum() / weights.sum()
     if tag == "p":
-        std = 4.62
+        std = 2.7
     elif tag == "h2":
         std = 0.5
     elif tag == "h3":
@@ -158,7 +158,7 @@ if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
     st.download_button("⬇️ Download Full Competitor Data", data=df_comp.to_csv(index=False), file_name="competitor_data.csv")
     st.download_button("⬇️ Download Range Summary", data=df.to_csv(index=False), file_name="range_analysis.csv")
 
-    with st.expander("🐞 Debug Breakdown - User Block Matches"):
+    with st.expander("🧾 Debug Breakdown - User Block Matches"):
         for tag in tags:
             st.markdown(f"#### Tag: {tag.upper()}")
             for entry in user_debug.get(tag, []):
