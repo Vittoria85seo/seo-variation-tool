@@ -29,6 +29,7 @@ if comp_urls:
 variations_input = st.text_area("📋 Paste variation list (comma-separated):")
 tags = ["h2", "h3", "h4", "p"]
 
+
 def extract_text_by_tag(html_str, tags):
     soup = BeautifulSoup(html_str, "html.parser")
     for tag in ["script", "style", "noscript", "template", "svg"]:
@@ -43,6 +44,7 @@ def extract_text_by_tag(html_str, tags):
             if text:
                 text_blocks[tag].append(text)
     return text_blocks
+
 
 def get_body_nav_word_count(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
@@ -59,20 +61,26 @@ def get_body_nav_word_count(html_str):
                 texts.append(t)
     return len(" ".join(texts).split())
 
+
 def count_variations(text_blocks, variations):
     counts = {}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
     patterns = [(v, re.compile(rf"(?<![\\w-]){re.escape(v)}(?=[\\W]|$)", re.IGNORECASE)) for v in sorted_vars]
+    detailed_debug = {}
     for tag, blocks in text_blocks.items():
         tag_count = 0
+        debug_list = []
         for block in blocks:
             matched_vars = set()
             for v, pattern in patterns:
                 if pattern.search(block):
                     matched_vars.add(v)
             tag_count += len(matched_vars)
+            debug_list.append({"text": block, "matches": list(matched_vars)})
         counts[tag] = tag_count
-    return counts
+        detailed_debug[tag] = debug_list
+    return counts, detailed_debug
+
 
 def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
     arr = np.array(arr)
@@ -97,7 +105,7 @@ if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
     user_html_str = user_html.read().decode("utf-8", errors="replace")
     variations = [v.strip() for v in variations_input.split(",") if v.strip()]
     user_text = extract_text_by_tag(user_html_str, tags)
-    user_counts = count_variations(user_text, variations)
+    user_counts, user_debug = count_variations(user_text, variations)
     user_wc = get_body_nav_word_count(user_html_str)
 
     st.header("📌 User Page Analysis")
@@ -110,23 +118,22 @@ if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
     comp_word_counts = []
     ranks = []
     competitor_data = []
-
-    debug_blocks = {"user_html_blocks": user_text}
+    all_debugs = []
 
     for i, html in enumerate(comp_codes):
         if not html.strip():
             continue
         comp_text = extract_text_by_tag(html, tags)
-        debug_blocks[f"Competitor {i+1}"] = comp_text
         comp_wc = get_body_nav_word_count(html)
         comp_word_counts.append(comp_wc)
-        comp_variations = count_variations(comp_text, variations)
+        comp_variations, comp_debug = count_variations(comp_text, variations)
         ranks.append(i + 1)
         row = {"Competitor": f"Competitor {i+1}", "Word Count": comp_wc}
         for tag in tags:
             row[tag.upper()] = comp_variations.get(tag, 0)
             comp_counts[tag].append(comp_variations.get(tag, 0))
         competitor_data.append(row)
+        all_debugs.append({"Competitor": f"Competitor {i+1}", "debug": comp_debug})
 
     df_comp = pd.DataFrame(competitor_data)
     st.dataframe(df_comp)
@@ -151,14 +158,10 @@ if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
     st.download_button("⬇️ Download Full Competitor Data", data=df_comp.to_csv(index=False), file_name="competitor_data.csv")
     st.download_button("⬇️ Download Range Summary", data=df.to_csv(index=False), file_name="range_analysis.csv")
 
-    with st.expander("🔞 Debug Info"):
-        st.write("User Counts:", user_counts)
-        st.write("User Text Blocks:", user_text)
-        st.write("Competitor Word Counts:", comp_word_counts)
-        st.write("Competitor Counts:", comp_counts)
-        st.write("Ranks:", ranks)
-        st.write("Avg Competitor Word Count:", comp_avg_wc)
-        st.write("Variations Used:", variations)
-        st.write("Extracted Blocks Per Competitor:", debug_blocks)
-        st.write("Raw HTML Length:", len(user_html_str))
-        st.write("First 300 chars of User HTML:", user_html_str[:300])
+    with st.expander("🐞 Debug Breakdown - User Block Matches"):
+        for tag in tags:
+            st.markdown(f"#### Tag: {tag.upper()}")
+            for entry in user_debug.get(tag, []):
+                st.markdown(f"- **Text:** {entry['text'][:100]}... → **Matches:** {entry['matches']}")
+
+    st.download_button("⬇️ Download Debug JSON", data=pd.DataFrame(all_debugs).to_json(), file_name="debug_output.json")
