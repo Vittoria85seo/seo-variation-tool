@@ -24,7 +24,6 @@ if len(competitor_urls) == 10:
 variations_input = st.text_area("Enter variation terms (comma-separated)")
 variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
 
-
 # ========== CORE UTILITY FUNCTIONS ==========
 def extract_tag_texts(html_str):
     soup = BeautifulSoup(html_str, "html.parser")
@@ -42,12 +41,10 @@ def extract_tag_texts(html_str):
     word_count = len(" ".join(sum(texts.values(), [])).split())
     return texts, word_count
 
-
 def count_variations(texts, variations):
     sorted_vars = sorted(set(variations), key=len, reverse=True)
     patterns = [(v, re.compile(rf"(?<!\\w){re.escape(v)}(?=(?:\\s?[^\\w<]|$))", re.IGNORECASE)) for v in sorted_vars]
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
-
     for tag in texts:
         for txt in texts[tag]:
             matched = set()
@@ -56,7 +53,6 @@ def count_variations(texts, variations):
                     matched.add(var)
             counts[tag] += len(matched)
     return counts
-
 
 def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
     result = {}
@@ -78,10 +74,10 @@ def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
             result[tag] = (min_v, max_v)
     return result
 
-
 # ========== MAIN LOGIC EXECUTION ==========
-if user_file and len(competitor_files) == 10 and all(competitor_files) and variations:
-    debug_log = {"user_read_success": False, "competitor_reads": [], "user_counts": {}, "comp_counts": [], "errors": []}
+debug_log = {"user_read_success": False, "competitor_reads": [], "user_counts": {}, "comp_counts": [], "errors": []}
+
+if user_file:
     try:
         user_html_bytes = user_file.read()
         user_html = user_html_bytes.decode("utf-8", errors="replace")
@@ -89,40 +85,41 @@ if user_file and len(competitor_files) == 10 and all(competitor_files) and varia
         user_texts, user_wc = extract_tag_texts(user_html)
         user_counts = count_variations(user_texts, variations)
         debug_log["user_counts"] = user_counts
-
-        comp_counts = []
-        comp_wcs = []
-        for i, f in enumerate(competitor_files):
-            try:
-                html = f.read().decode("utf-8", errors="replace")
-                texts, wc = extract_tag_texts(html)
-                count = count_variations(texts, variations)
-                comp_wcs.append(wc)
-                comp_counts.append(count)
-                debug_log["competitor_reads"].append({"index": i, "success": True, "wc": wc, "counts": count})
-            except Exception as e:
-                debug_log["competitor_reads"].append({"index": i, "success": False, "error": str(e)})
-                comp_wcs.append(0)
-                comp_counts.append({"h2": 0, "h3": 0, "h4": 0, "p": 0})
-
-        tag_counts_dict = {tag: [c[tag] for c in comp_counts] for tag in ["h2", "h3", "h4", "p"]}
-        fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
-        ranges = benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, fixed_weights)
-
-        df_data = {
-            "Tag": ["H2", "H3", "H4", "P"],
-            "Your Count": [user_counts[t] for t in ["h2", "h3", "h4", "p"]],
-            "Recommended Min": [ranges[t][0] for t in ["h2", "h3", "h4", "p"]],
-            "Recommended Max": [ranges[t][1] for t in ["h2", "h3", "h4", "p"]]
-        }
-        st.subheader("Final Analysis")
-        st.dataframe(pd.DataFrame(df_data))
-
-        st.subheader("Downloadable Debug Output")
-        debug_json = json.dumps(debug_log, indent=2)
-        st.download_button("Download Debug JSON", debug_json, file_name="debug_output.json")
-
     except Exception as e:
-        st.error(f"Error during processing: {str(e)}")
-        debug_log["errors"].append(str(e))
-        st.download_button("Download Debug JSON (Error)", json.dumps(debug_log, indent=2), file_name="debug_output_error.json")
+        debug_log["errors"].append(f"User HTML parse error: {str(e)}")
+        user_wc = 0
+        user_counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
+
+comp_counts = []
+comp_wcs = []
+if len(competitor_files) == 10 and all(competitor_files):
+    for i, f in enumerate(competitor_files):
+        try:
+            html = f.read().decode("utf-8", errors="replace")
+            texts, wc = extract_tag_texts(html)
+            count = count_variations(texts, variations)
+            comp_wcs.append(wc)
+            comp_counts.append(count)
+            debug_log["competitor_reads"].append({"index": i, "success": True, "wc": wc, "counts": count})
+        except Exception as e:
+            debug_log["competitor_reads"].append({"index": i, "success": False, "error": str(e)})
+            comp_wcs.append(0)
+            comp_counts.append({"h2": 0, "h3": 0, "h4": 0, "p": 0})
+
+if user_counts and comp_counts:
+    tag_counts_dict = {tag: [c[tag] for c in comp_counts] for tag in ["h2", "h3", "h4", "p"]}
+    fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
+    ranges = benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, fixed_weights)
+
+    df_data = {
+        "Tag": ["H2", "H3", "H4", "P"],
+        "Your Count": [user_counts[t] for t in ["h2", "h3", "h4", "p"]],
+        "Recommended Min": [ranges[t][0] for t in ["h2", "h3", "h4", "p"]],
+        "Recommended Max": [ranges[t][1] for t in ["h2", "h3", "h4", "p"]]
+    }
+    st.subheader("Final Analysis")
+    st.dataframe(pd.DataFrame(df_data))
+
+st.subheader("Downloadable Debug Output")
+debug_json = json.dumps(debug_log, indent=2)
+st.download_button("Download Debug JSON", debug_json, file_name="debug_output.json")
