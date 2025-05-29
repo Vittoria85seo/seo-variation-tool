@@ -69,30 +69,28 @@ def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
     rmax = int(mean + std)
     return rmin, rmax
 
-st.set_page_config(layout="wide")
+st.set_page_config(layout="centered")
 st.title("🔍 SEO Variation Analyzer")
 
-url_col, code_col = st.columns([1, 3])
+st.markdown("### 🧩 Your Page Info")
+user_url = st.text_input("User Page URL:")
+user_html = st.text_area("Paste your HTML code (User Page):", height=300)
 
-with url_col:
-    st.markdown("### 🧩 Your Page Info")
-    user_url = st.text_input("User Page URL:")
-    comp_urls = []
-    for i in range(10):
-        url = st.text_input(f"Competitor {i+1} URL:", key=f"cu{i}")
-        comp_urls.append(url)
+st.markdown("### 📥 Competitor URLs")
+competitor_url_list = st.text_area("Paste list of 10 competitor URLs (one per line):")
 
-with code_col:
-    user_html = st.text_area("Paste your HTML code (User Page):", height=300)
-    comp_codes = []
-    for i in range(10):
-        code = st.text_area(f"Paste HTML code for Competitor {i+1}:", height=200, key=f"cc{i}")
-        comp_codes.append(code)
+comp_urls = [url.strip() for url in competitor_url_list.strip().splitlines() if url.strip()][:10]
+comp_codes = []
+if comp_urls:
+    st.markdown("### 📝 Paste HTML code for each Competitor:")
+    for i, url in enumerate(comp_urls):
+        html_code = st.text_area(f"Competitor {i+1} ({url}) HTML Code:", height=200, key=f"cc{i}")
+        comp_codes.append(html_code)
 
-variations_input = st.text_area("Paste variation list (comma-separated):")
+variations_input = st.text_area("📋 Paste variation list (comma-separated):")
 tags = ["h2", "h3", "h4", "p"]
 
-if user_html and all(comp_codes) and variations_input:
+if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
     variations = [v.strip() for v in variations_input.split(",") if v.strip()]
     user_text = extract_text_by_tag(user_html, tags)
     user_counts = count_variations(user_text, variations)
