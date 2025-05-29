@@ -1,133 +1,149 @@
-@@ -1,12 +1,12 @@
-# Final Streamlit App (fully verified)
 import streamlit as st
-import pandas as pd
-import numpy as np
 import re
 from bs4 import BeautifulSoup
-import json
+import pandas as pd
+import numpy as np
+from io import StringIO
 
 st.set_page_config(layout="centered")
-st.title("SEO Variation Distribution Tool - FIXED PARSING + DEBUG")
-st.title("SEO Variation Distribution Tool")
+st.title("🔍 SEO Variation Analyzer")
 
-user_url = st.text_input("Your Page URL")
-user_file = st.file_uploader("Upload Your Page HTML", type="html", key="user_html")
-@@ -24,7 +24,7 @@
-variations_input = st.text_area("Enter variation terms (comma-separated)")
-variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
+st.markdown("### 🧩 Your Page Info")
+user_url = st.text_input("User Page URL:")
+user_html = st.file_uploader("Upload your HTML file (User Page):", type=["html"])
 
-# ========== CORE UTILITY FUNCTIONS ==========
+st.markdown("### 📥 Competitor URLs")
+competitor_url_list = st.text_area("Paste list of 10 competitor URLs (one per line):")
 
-def extract_tag_texts(html_str):
-soup = BeautifulSoup(html_str, "html.parser")
-for tag in ["script", "style", "noscript", "template", "svg"]:
-@@ -41,10 +41,12 @@ def extract_tag_texts(html_str):
-word_count = len(" ".join(sum(texts.values(), [])).split())
-return texts, word_count
+comp_urls = [url.strip() for url in competitor_url_list.strip().splitlines() if url.strip()][:10]
+comp_codes = []
+if comp_urls:
+    st.markdown("### 📝 Upload HTML code for each Competitor:")
+    for i, url in enumerate(comp_urls):
+        uploaded = st.file_uploader(f"Upload Competitor {i+1} ({url}) HTML:", type=["html"], key=f"comp{i}")
+        if uploaded:
+            comp_codes.append(uploaded.read().decode("utf-8"))
+        else:
+            comp_codes.append("")
 
+variations_input = st.text_area("📋 Paste variation list (comma-separated):")
+tags = ["h2", "h3", "h4", "p"]
 
-def count_variations(texts, variations):
-sorted_vars = sorted(set(variations), key=len, reverse=True)
-patterns = [(v, re.compile(rf"(?<!\\w){re.escape(v)}(?=(?:\\s?[^\\w<]|$))", re.IGNORECASE)) for v in sorted_vars]
-counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
-
-for tag in texts:
-for txt in texts[tag]:
-matched = set()
-@@ -54,6 +56,18 @@ def count_variations(texts, variations):
-counts[tag] += len(matched)
-return counts
-
-
-def per_variation_counts_all(html_str, variations):
+def extract_text_by_tag(html_str, tags):
     soup = BeautifulSoup(html_str, "html.parser")
-    full_text = soup.get_text(" ", strip=True)
+    for tag in ["script", "style", "noscript", "template", "svg"]:
+        for el in soup.find_all(tag):
+            el.decompose()
+    for el in soup.find_all(attrs={"aria-label": True}):
+        el.decompose()
+    text_blocks = {tag: [] for tag in tags}
+    for tag in tags:
+        for el in soup.find_all(tag):
+            text = el.get_text(" ", strip=True)
+            if text:
+                text_blocks[tag].append(text)
+    return text_blocks
+
+def get_body_nav_word_count(html_str):
+    soup = BeautifulSoup(html_str, "html.parser")
+    for tag in ["script", "style", "noscript", "template", "svg"]:
+        for el in soup.find_all(tag):
+            el.decompose()
+    for el in soup.find_all(attrs={"aria-label": True}):
+        el.decompose()
+    texts = []
+    for tag in ["body", "nav"]:
+        for el in soup.find_all(tag):
+            t = el.get_text(" ", strip=True)
+            if t:
+                texts.append(t)
+    return len(" ".join(texts).split())
+
+def count_variations(text_blocks, variations):
+    counts = {}
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    patterns = [(v, re.compile(rf"(?<!\\w){re.escape(v)}(?=(?:\\s?[^\\w<]|$))", re.IGNORECASE)) for v in sorted_vars]
-    var_counts = {v: 0 for v in variations}
-    for var, pattern in patterns:
-        var_counts[var] = len(pattern.findall(full_text))
-    return var_counts
+    patterns = [(v, re.compile(rf"(?<![\\w-]){re.escape(v)}(?=[\\W]|$)", re.IGNORECASE)) for v in sorted_vars]
+    for tag, blocks in text_blocks.items():
+        tag_count = 0
+        for block in blocks:
+            matched_vars = set()
+            for v, pattern in patterns:
+                if pattern.search(block):
+                    matched_vars.add(v)
+            tag_count += len(matched_vars)
+        counts[tag] = tag_count
+    return counts
 
+def soft_weighted_range(arr, ranks, user_wc, comp_avg_wc, tag):
+    arr = np.array(arr)
+    ranks = np.array(ranks)
+    weights = (11 - ranks) ** 2
+    scaled = arr * (user_wc / comp_avg_wc)
+    weighted = scaled * weights
+    mean = weighted.sum() / weights.sum()
+    if tag == "p":
+        std = 4.62
+    elif tag == "h2":
+        std = 0.5
+    elif tag == "h3":
+        std = 1.5
+    else:
+        std = 0
+    rmin = int(max(0, mean - std))
+    rmax = int(mean + std)
+    return rmin, rmax
 
-def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
-result = {}
-avg_wc = np.average(comp_wcs, weights=weights)
-@@ -74,39 +88,25 @@ def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
-result[tag] = (min_v, max_v)
-return result
+if user_html and len(comp_codes) == 10 and all(comp_codes) and variations_input:
+    user_html_str = user_html.read().decode("utf-8")
+    variations = [v.strip() for v in variations_input.split(",") if v.strip()]
+    user_text = extract_text_by_tag(user_html_str, tags)
+    user_counts = count_variations(user_text, variations)
+    user_wc = get_body_nav_word_count(user_html_str)
 
-# ========== MAIN LOGIC EXECUTION ==========
-debug_log = {"user_read_success": False, "competitor_reads": [], "user_counts": {}, "comp_counts": [], "errors": []}
+    st.header("📌 User Page Analysis")
+    st.markdown(f"**User Word Count (Body+Nav):** {user_wc}")
+    user_stats = {tag.upper(): user_counts.get(tag, 0) for tag in tags}
+    st.dataframe(pd.DataFrame([user_stats]))
 
-if user_file:
-    try:
-        user_html_bytes = user_file.read()
-        user_html = user_html_bytes.decode("utf-8", errors="replace")
-        debug_log["user_read_success"] = True
-        user_texts, user_wc = extract_tag_texts(user_html)
-        user_counts = count_variations(user_texts, variations)
-        debug_log["user_counts"] = user_counts
-    except Exception as e:
-        debug_log["errors"].append(f"User HTML parse error: {str(e)}")
-        user_wc = 0
-        user_counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
+    st.header("📦 Competitor Pages Analysis")
+    comp_counts = {tag: [] for tag in tags}
+    comp_word_counts = []
+    ranks = []
+    competitor_data = []
 
-comp_counts = []
-comp_wcs = []
-if len(competitor_files) == 10 and all(competitor_files):
-    for i, f in enumerate(competitor_files):
-        try:
-            html = f.read().decode("utf-8", errors="replace")
-            texts, wc = extract_tag_texts(html)
-            count = count_variations(texts, variations)
-            comp_wcs.append(wc)
-            comp_counts.append(count)
-            debug_log["competitor_reads"].append({"index": i, "success": True, "wc": wc, "counts": count})
-        except Exception as e:
-            debug_log["competitor_reads"].append({"index": i, "success": False, "error": str(e)})
-            comp_wcs.append(0)
-            comp_counts.append({"h2": 0, "h3": 0, "h4": 0, "p": 0})
+    for i, html in enumerate(comp_codes):
+        if not html.strip():
+            continue
+        comp_text = extract_text_by_tag(html, tags)
+        comp_wc = get_body_nav_word_count(html)
+        comp_word_counts.append(comp_wc)
+        comp_variations = count_variations(comp_text, variations)
+        ranks.append(i + 1)
+        row = {"Competitor": f"Competitor {i+1}", "Word Count": comp_wc}
+        for tag in tags:
+            row[tag.upper()] = comp_variations.get(tag, 0)
+            comp_counts[tag].append(comp_variations.get(tag, 0))
+        competitor_data.append(row)
 
-if user_counts and comp_counts:
-if user_file and len(competitor_files) == 10 and all(competitor_files) and variations:
-    user_html = user_file.read().decode("utf-8")
-    user_texts, user_wc = extract_tag_texts(user_html)
-    user_counts = count_variations(user_texts, variations)
-    user_per_var = per_variation_counts_all(user_html, variations)
+    df_comp = pd.DataFrame(competitor_data)
+    st.dataframe(df_comp)
 
-    comp_counts = []
-    comp_wcs = []
-    comp_var_totals = {v: [] for v in variations}
+    comp_avg_wc = np.mean(comp_word_counts)
 
-    for f in competitor_files:
-        html = f.read().decode("utf-8")
-        texts, wc = extract_tag_texts(html)
-        comp_wcs.append(wc)
-        cvc = per_variation_counts_all(html, variations)
-        for v in variations:
-            comp_var_totals[v].append(cvc[v])
-        comp_counts.append(count_variations(texts, variations))
+    results = []
+    for tag in tags:
+        rmin, rmax = soft_weighted_range(comp_counts[tag], ranks, user_wc, comp_avg_wc, tag)
+        results.append({
+            "Tag": tag.upper(),
+            "Your Count": user_counts.get(tag, 0),
+            "Scaled Min": rmin,
+            "Scaled Max": rmax,
+            "In Range": rmin <= user_counts.get(tag, 0) <= rmax
+        })
 
-tag_counts_dict = {tag: [c[tag] for c in comp_counts] for tag in ["h2", "h3", "h4", "p"]}
-fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
-ranges = benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, fixed_weights)
-@@ -117,9 +117,14 @@ def benchmark_ranges_weighted(tag_counts_dict, user_wc, comp_wcs, weights):
-"Recommended Min": [ranges[t][0] for t in ["h2", "h3", "h4", "p"]],
-"Recommended Max": [ranges[t][1] for t in ["h2", "h3", "h4", "p"]]
-}
+    st.header("📊 Final Range Comparison")
+    df = pd.DataFrame(results)
+    st.dataframe(df)
 
-st.subheader("Final Analysis")
-st.dataframe(pd.DataFrame(df_data))
-
-st.subheader("Downloadable Debug Output")
-debug_json = json.dumps(debug_log, indent=2)
-st.download_button("Download Debug JSON", debug_json, file_name="debug_output.json")
-    st.subheader("Variation Count Table")
-    var_data = {
-        "Variation": variations,
-        "C = User Count": [user_per_var[v] for v in variations],
-        "A = Avg Competitor Count": [round(np.mean(comp_var_totals[v]), 2) for v in variations]
-    }
-    st.dataframe(pd.DataFrame(var_data))
+    st.download_button("⬇️ Download Full Competitor Data", data=df_comp.to_csv(index=False), file_name="competitor_data.csv")
+    st.download_button("⬇️ Download Range Summary", data=df.to_csv(index=False), file_name="range_analysis.csv")
