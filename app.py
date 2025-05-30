@@ -81,14 +81,20 @@ def benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts
     result = {}
     avg_wc = np.average(comp_word_counts, weights=weights)
     scale = user_word_count / avg_wc if avg_wc else 1.0
+
     for tag, counts in tag_counts_dict.items():
         weighted_avg = np.average(counts, weights=weights)
-        if tag == "p":
-            low = 0.9 * weighted_avg * scale
+
+        if tag == "h2" or tag == "h3":
+            low = 0.6 * weighted_avg * scale
             high = 1.1 * weighted_avg * scale
+        elif tag == "p":
+            low = 0.85 * weighted_avg * scale
+            high = 1.05 * weighted_avg * scale
         else:
             low = 0.8 * weighted_avg * scale
             high = 1.2 * weighted_avg * scale
+
         min_v = max(int(np.floor(low)), 0)
         max_v = max(int(np.ceil(high)), 0)
         if tag == "h4" and all(v == 0 for v in counts):
@@ -160,7 +166,9 @@ if any(user_counts.values()) and comp_counts:
     tag_counts_dict = {tag: [c[tag] for c in comp_counts] for tag in ["h2", "h3", "h4", "p"]}
     fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
     ranges = benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts, fixed_weights)
-debug_log["recommended_ranges"] = ranges
+    debug_log["recommended_ranges"] = ranges
+    
+
 
     df_data = {
         "Tag": ["H2", "H3", "H4", "P"],
