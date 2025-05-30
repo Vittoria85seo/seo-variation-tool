@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import json
 
 st.set_page_config(layout="centered")
-st.title("SEO Variation Distribution Tool - FIXED PARSING + DEBUG")
+st.title("SEO Variation Distribution Tool - FINALIZED")
 
 # === PAGE INPUTS ===
 user_url = st.text_input("Your Page URL")
@@ -15,15 +15,17 @@ user_file = st.file_uploader("Upload Your Page HTML", type="html", key="user_htm
 competitor_urls_input = st.text_area("Enter Top 10 Competitor URLs (one per line)")
 competitor_urls = [u.strip() for u in competitor_urls_input.strip().splitlines() if u.strip()]
 
+st.subheader("Upload Corresponding Competitor HTML Files")
 competitor_files = []
-if len(competitor_urls) == 10:
-    st.subheader("Upload Corresponding Competitor HTML Files (in order of URLs above)")
-    for i, url in enumerate(competitor_urls):
-        f = st.file_uploader(f"Competitor {i+1}: {url}", type="html", key=f"comp{i}")
-        competitor_files.append(f)
+for i in range(10):
+    url_display = competitor_urls[i] if i < len(competitor_urls) else f"Competitor {i+1}"
+    f = st.file_uploader(f"Competitor {i+1}: {url_display}", type="html", key=f"comp_{i}")
+    competitor_files.append(f)
 
 variations_input = st.text_area("Enter variation terms (comma-separated)")
 variations = [v.strip().lower() for v in variations_input.split(",") if v.strip()]
+if not variations:
+    st.warning("No variation terms provided.")
 
 # ========== CORE UTILITY FUNCTIONS ==========
 def extract_tag_texts(html_str):
@@ -84,6 +86,8 @@ user_counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
 if user_file:
     try:
         user_html_bytes = user_file.read()
+        if not user_html_bytes:
+            raise ValueError("User file is empty or failed to read.")
         user_html = user_html_bytes.decode("utf-8", errors="replace")
         debug_log["user_read_success"] = True
         user_texts, user_wc = extract_tag_texts(user_html)
@@ -96,14 +100,24 @@ if user_file:
         st.write("Variation match counts:", user_counts)
 
     except Exception as e:
+        st.error(f"Error parsing user file: {str(e)}")
         debug_log["errors"].append(f"User HTML parse error: {str(e)}")
 
 comp_counts = []
 comp_wcs = []
-if len(competitor_files) == 10 and all(competitor_files):
+valid_comp_files = [f for f in competitor_files if f]
+if len(valid_comp_files) < 10:
+    st.warning("Please upload all 10 competitor HTML files.")
+
+if len(valid_comp_files) == 10:
     for i, f in enumerate(competitor_files):
         try:
-            html = f.read().decode("utf-8", errors="replace")
+            if f is None:
+                raise ValueError("File missing.")
+            html_bytes = f.read()
+            if not html_bytes:
+                raise ValueError("Empty file content.")
+            html = html_bytes.decode("utf-8", errors="replace")
             texts, wc = extract_tag_texts(html)
             count = count_variations(texts, variations)
             comp_wcs.append(wc)
@@ -116,6 +130,7 @@ if len(competitor_files) == 10 and all(competitor_files):
             st.write("Variation match counts:", count)
 
         except Exception as e:
+            st.error(f"Competitor {i+1} file error: {str(e)}")
             debug_log["competitor_reads"].append({"index": i, "success": False, "error": str(e)})
             comp_wcs.append(0)
             comp_counts.append({"h2": 0, "h3": 0, "h4": 0, "p": 0})
