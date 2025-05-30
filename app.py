@@ -161,7 +161,7 @@ if len(valid_comp_files) == 10:
             debug_log["competitor_reads"].append({"index": i, "url": competitor_urls[i] if i < len(competitor_urls) else f"Competitor {i+1}", "success": True, "wc": wc, "counts": count})
 
             st.subheader(f"Competitor {i+1} Debug Info")
-st.write("URL:", competitor_urls[i] if i < len(competitor_urls) else f"Competitor {i+1}")
+# st.write("URL:", competitor_urls[i] if i < len(competitor_urls) else f"Competitor {i+1}")
             st.write("Total body word count:", wc)
             st.write("Extracted tag counts:", {tag: len(texts[tag]) for tag in texts})
             st.write("Variation match counts:", count)
