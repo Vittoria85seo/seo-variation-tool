@@ -61,12 +61,7 @@ def extract_tag_texts(html_str):
             el.extract()
         body_text += " " + nav.get_text(" ", strip=True)
 
-    # Fallback: also parse visible strings not caught
-    visible_texts = soup.stripped_strings
-    all_text = " ".join(visible_texts)
-
-    nav_text = nav.get_text(" ", strip=True) if nav else ""
-    word_count = len((body_text + " " + nav_text).split())
+    word_count = len(body_text.split())
     return texts, word_count
 
 def count_variations(texts, variations):
@@ -90,33 +85,20 @@ def benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts
     for tag, counts in tag_counts_dict.items():
         if tag == "h3":
             counts_filtered = [v for v in counts if v < 10]
-            weights_filtered = weights[:len(counts_filtered)]
+            weights_filtered = [weights[i] for i, v in enumerate(counts) if v < 10]
             weighted_avg = np.average(counts_filtered, weights=weights_filtered) if counts_filtered else 0
             low = 0.3 * weighted_avg * scale
             high = 0.6 * weighted_avg * scale
         elif tag == "p":
             weighted_avg = np.average(counts, weights=weights)
-            low = 0.9 * weighted_avg * scale
-            high = 1.1 * weighted_avg * scale
-        else:
-            weighted_avg = np.average(counts, weights=weights)
-            if tag == "h2":
-                low = 0.3 * weighted_avg * scale
-                high = 0.7 * weighted_avg * scale
-            else:
-                low = 0.8 * weighted_avg * scale
-                high = 1.2 * weighted_avg * scale
-
-        if tag == "h3":
-            low = 0.3 * weighted_avg * scale
-            high = 0.6 * weighted_avg * scale
-        elif tag == "h2":
-            low = 0.3 * weighted_avg * scale
-            high = 0.7 * weighted_avg * scale
-        elif tag == "p":
             low = 1.3 * weighted_avg * scale
             high = 1.6 * weighted_avg * scale
+        elif tag == "h2":
+            weighted_avg = np.average(counts, weights=weights)
+            low = 0.3 * weighted_avg * scale
+            high = 0.7 * weighted_avg * scale
         else:
+            weighted_avg = np.average(counts, weights=weights)
             low = 0.8 * weighted_avg * scale
             high = 1.2 * weighted_avg * scale
 
@@ -156,7 +138,6 @@ if user_file:
         debug_log["errors"].append(f"User HTML parse error: {str(e)}")
 
 comp_counts = []
-# manual_p_variation_counts removed
 comp_word_counts = []
 valid_comp_files = [f for f in competitor_files if f]
 if len(valid_comp_files) < 10:
@@ -179,7 +160,6 @@ if len(valid_comp_files) == 10:
             debug_log["competitor_reads"].append({"index": i, "url": competitor_urls[i] if i < len(competitor_urls) else f"Competitor {i+1}", "success": True, "wc": wc, "counts": count})
 
             st.subheader(f"Competitor {i+1} Debug Info")
-# st.write("URL:", competitor_urls[i] if i < len(competitor_urls) else f"Competitor {i+1}")
             st.write("Total body word count:", wc)
             st.write("Extracted tag counts:", {tag: len(texts[tag]) for tag in texts})
             st.write("Variation match counts:", count)
@@ -205,6 +185,7 @@ if any(user_counts.values()) and comp_counts:
     }
     st.subheader("Final Analysis")
     st.dataframe(pd.DataFrame(df_data))
+
 st.subheader("Downloadable Debug Output")
 debug_json = json.dumps(debug_log, indent=2)
 st.download_button("Download Debug JSON", debug_json, file_name="debug_output.json")
