@@ -42,12 +42,24 @@ def extract_tag_texts(html_str):
         "p":  [el.get_text(" ", strip=True) for el in soup.find_all(["p", "li"])]
     }
     body = soup.find("body")
-    if body:
-        for tag in body(["script", "style", "noscript", "template", "svg"]):
-            tag.extract()
-        for el in body.find_all(attrs={"aria-label": True}):
-            el.extract()
-        word_count = len(body.get_text(" ", strip=True).split())
+nav = soup.find("nav")
+
+body_text = ""
+if body:
+    for tag in body(["script", "style", "noscript", "template", "svg"]):
+        tag.extract()
+    for el in body.find_all(attrs={"aria-label": True}):
+        el.extract()
+    body_text += body.get_text(" ", strip=True)
+
+if nav:
+    for tag in nav(["script", "style", "noscript", "template", "svg"]):
+        tag.extract()
+    for el in nav.find_all(attrs={"aria-label": True}):
+        el.extract()
+    body_text += " " + nav.get_text(" ", strip=True)
+
+word_count = len(body_text.split())
     else:
         word_count = 0
     return texts, word_count
@@ -71,14 +83,10 @@ def benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts
     scale = user_word_count / avg_wc if avg_wc else 1.0
     for tag, counts in tag_counts_dict.items():
         weighted_avg = np.average(counts, weights=weights)
-        stddev = np.sqrt(np.average((np.array(counts) - weighted_avg) ** 2, weights=weights))
-        spread = 0.20 if tag == "p" else 0.25
-        lo = weighted_avg - spread * stddev
-        hi = weighted_avg + spread * stddev
-        min_v = int(np.floor(lo * scale))
-        max_v = int(np.ceil(hi * scale))
-        min_v = max(min_v, 0)
-        max_v = max(max_v, 0)
+        low = 0.8 * weighted_avg * scale
+        high = 1.2 * weighted_avg * scale
+        min_v = max(int(np.floor(low)), 0)
+        max_v = max(int(np.ceil(high)), 0)
         if tag == "h4" and all(v == 0 for v in counts):
             result[tag] = (0, 0)
         else:
@@ -101,6 +109,7 @@ if user_file:
         user_texts, user_word_count = extract_tag_texts(user_html)
         user_counts = count_variations(user_texts, variations)
         debug_log["user_counts"] = user_counts
+        debug_log["user_counts"]["word_count"] = user_word_count
 
         st.subheader("User HTML Debug Info")
         st.write("Total body word count:", user_word_count)
