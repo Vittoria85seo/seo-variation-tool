@@ -61,7 +61,11 @@ def extract_tag_texts(html_str):
             el.extract()
         body_text += " " + nav.get_text(" ", strip=True)
 
-    word_count = len(body_text.split())
+    # Fallback: also parse visible strings not caught
+    visible_texts = soup.stripped_strings
+    all_text = " ".join(visible_texts)
+
+    word_count = max(len(body_text.split()), len(all_text.split()))
     return texts, word_count
 
 def count_variations(texts, variations):
@@ -85,12 +89,15 @@ def benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts
     for tag, counts in tag_counts_dict.items():
         weighted_avg = np.average(counts, weights=weights)
 
-        if tag == "h2" or tag == "h3":
+        if tag == "h3":
+            low = 0.5 * weighted_avg * scale
+            high = 0.9 * weighted_avg * scale
+        elif tag == "h2":
             low = 0.6 * weighted_avg * scale
             high = 1.1 * weighted_avg * scale
         elif tag == "p":
-            low = 0.85 * weighted_avg * scale
-            high = 1.05 * weighted_avg * scale
+            low = 1.3 * weighted_avg * scale
+            high = 1.6 * weighted_avg * scale
         else:
             low = 0.8 * weighted_avg * scale
             high = 1.2 * weighted_avg * scale
@@ -167,6 +174,7 @@ if any(user_counts.values()) and comp_counts:
     fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
     ranges = benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts, fixed_weights)
     debug_log["recommended_ranges"] = ranges
+    debug_log["competitor_p_averages"] = tag_counts_dict["p"]
     
 
 
