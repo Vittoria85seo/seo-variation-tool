@@ -65,7 +65,8 @@ def extract_tag_texts(html_str):
     visible_texts = soup.stripped_strings
     all_text = " ".join(visible_texts)
 
-    word_count = len((body_text + ' ' + nav.get_text(' ', strip=True) if nav else '').split())
+    nav_text = nav.get_text(" ", strip=True) if nav else ""
+    word_count = len((body_text + " " + nav_text).split())
     return texts, word_count
 
 def count_variations(texts, variations):
@@ -87,7 +88,24 @@ def benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts
     scale = user_word_count / avg_wc if avg_wc else 1.0
 
     for tag, counts in tag_counts_dict.items():
-        weighted_avg = np.average(counts, weights=weights)
+        if tag == "h3":
+            counts_filtered = [v for v in counts if v < 10]
+            weights_filtered = weights[:len(counts_filtered)]
+            weighted_avg = np.average(counts_filtered, weights=weights_filtered) if counts_filtered else 0
+            low = 0.3 * weighted_avg * scale
+            high = 0.6 * weighted_avg * scale
+        elif tag == "p":
+            weighted_avg = np.average(counts, weights=weights)
+            low = 0.9 * weighted_avg * scale
+            high = 1.1 * weighted_avg * scale
+        else:
+            weighted_avg = np.average(counts, weights=weights)
+            if tag == "h2":
+                low = 0.3 * weighted_avg * scale
+                high = 0.7 * weighted_avg * scale
+            else:
+                low = 0.8 * weighted_avg * scale
+                high = 1.2 * weighted_avg * scale
 
         if tag == "h3":
             low = 0.3 * weighted_avg * scale
@@ -138,7 +156,7 @@ if user_file:
         debug_log["errors"].append(f"User HTML parse error: {str(e)}")
 
 comp_counts = []
-manual_p_variation_counts = [53, 60, 0, 34, 46, 13, 68, 44, 124, 0]
+# manual_p_variation_counts removed
 comp_word_counts = []
 valid_comp_files = [f for f in competitor_files if f]
 if len(valid_comp_files) < 10:
@@ -180,8 +198,7 @@ if any(user_counts.values()) and comp_counts:
     fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
     ranges = benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts, fixed_weights)
     debug_log["recommended_ranges"] = ranges
-    debug_log["competitor_p_averages"] = manual_p_variation_counts
-    debug_log["competitor_p_averages"] = tag_counts_dict["p"]
+        debug_log["competitor_p_averages"] = tag_counts_dict["p"]
     debug_log["competitor_h3_averages"] = tag_counts_dict["h3"]
     
 
