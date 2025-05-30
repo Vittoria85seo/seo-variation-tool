@@ -197,15 +197,7 @@ if any(user_counts.values()) and comp_counts:
     # tag_counts_dict["p"] = manual_p_variation_counts  # override removed
     fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
     ranges = benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts, fixed_weights)
-    debug_log["recommended_ranges"] = ranges
-    debug_log["c
-    debug_log["competitor_h3_averages"] = tag_counts_dict["h3"]
-    
-
-
-    df_data = {
-        "Tag": ["H2", "H3", "H4", "P"],
-        "Your Count": [user_counts[t] for t in ["h2", "h3", "h4", "p"]],
+    3", "h4", "p"]],
         "Recommended Min": [ranges[t][0] for t in ["h2", "h3", "h4", "p"]],
         "Recommended Max": [ranges[t][1] for t in ["h2", "h3", "h4", "p"]]
     }
