@@ -41,14 +41,15 @@ def extract_tag_texts(html_str):
         "h4": [el.get_text(" ", strip=True) for el in soup.find_all("h4")],
         "p":  [el.get_text(" ", strip=True) for el in soup.find_all(["p", "li"])]
     }
-    visible_tags = ["main", "nav", "header", "footer", "section", "article", "div"]
-    visible_text = []
-    for tag in visible_tags:
-        for el in soup.find_all(tag):
-            text = el.get_text(" ", strip=True)
-            if text:
-                visible_text.append(text)
-    word_count = len(" ".join(visible_text).split())
+    body = soup.find("body")
+    if body:
+        for tag in body(["script", "style", "noscript", "template", "svg"]):
+            tag.extract()
+        for el in body.find_all(attrs={"aria-label": True}):
+            el.extract()
+        word_count = len(body.get_text(" ", strip=True).split())
+    else:
+        word_count = 0
     return texts, word_count
 
 def count_variations(texts, variations):
