@@ -145,7 +145,8 @@ if len(valid_comp_files) < 10:
     st.warning("Please upload all 10 competitor HTML files.")
 
 if len(valid_comp_files) == 10:
-    for i, f in enumerate(competitor_files):
+    for i in range(10):
+        f = competitor_files[i]
         try:
             if f is None:
                 raise ValueError("File missing.")
@@ -157,9 +158,10 @@ if len(valid_comp_files) == 10:
             count = count_variations(texts, variations)
             comp_word_counts.append(wc)
             comp_counts.append(count)
-            debug_log["competitor_reads"].append({"index": i, "success": True, "wc": wc, "counts": count})
+            debug_log["competitor_reads"].append({"index": i, "url": competitor_urls[i] if i < len(competitor_urls) else f"Competitor {i+1}", "success": True, "wc": wc, "counts": count})
 
             st.subheader(f"Competitor {i+1} Debug Info")
+st.write("URL:", competitor_urls[i] if i < len(competitor_urls) else f"Competitor {i+1}")
             st.write("Total body word count:", wc)
             st.write("Extracted tag counts:", {tag: len(texts[tag]) for tag in texts})
             st.write("Variation match counts:", count)
