@@ -198,7 +198,7 @@ if any(user_counts.values()) and comp_counts:
     fixed_weights = [1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6]
     ranges = benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts, fixed_weights)
     debug_log["recommended_ranges"] = ranges
-        debug_log["competitor_p_averages"] = tag_counts_dict["p"]
+    debug_log["c
     debug_log["competitor_h3_averages"] = tag_counts_dict["h3"]
     
 
