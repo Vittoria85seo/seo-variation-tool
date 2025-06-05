@@ -66,7 +66,7 @@ def extract_tag_texts(html_str):
 
 def count_variations(texts, variations):
     sorted_vars = sorted(set(variations), key=len, reverse=True)
-    patterns = [(v, re.compile(rf"(?<!\w){re.escape(v)}(?=[\s\.,;:!\?)])|(?<!\w){re.escape(v)}$", re.IGNORECASE)) for v in sorted_vars]
+    patterns = [(v, re.compile(rf"(?<!\\w){re.escape(v)}(?=[\\s\\.,;:!\\?)])|(?<!\\w){re.escape(v)}$", re.IGNORECASE)) for v in sorted_vars]
     counts = {"h2": 0, "h3": 0, "h4": 0, "p": 0}
     for tag in texts:
         for txt in texts[tag]:
@@ -90,7 +90,9 @@ def benchmark_ranges_weighted(tag_counts_dict, user_word_count, comp_word_counts
             low = 0.3 * weighted_avg * scale
             high = 0.6 * weighted_avg * scale
         elif tag == "p":
-            weighted_avg = np.average(counts, weights=weights)
+            adjusted_weights = weights.copy()
+            adjusted_weights[7] = 0.5  # Downweight Zalando
+            weighted_avg = np.average(counts, weights=adjusted_weights)
             low = 1.3 * weighted_avg * scale
             high = 1.6 * weighted_avg * scale
         elif tag == "h2":
