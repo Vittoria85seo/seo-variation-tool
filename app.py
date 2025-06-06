@@ -2,6 +2,8 @@ import streamlit as st
 import json
 from bs4 import BeautifulSoup
 import math
+import base64
+import io
 
 def compute_benchmark_ranges(user_html, competitor_data, coefficients):
 
@@ -79,13 +81,13 @@ with st.form("variation_form"):
 
 if submitted:
     variation_list = [v.strip() for v in variations_input.split(",") if v.strip()]
-    if user_html and all(file is not None for file in competitor_html_files) and len(variation_list) > 0:
-        try:
-            user_html_content = user_html.read().decode("utf-8")
-            competitor_data = []
+    user_html_content = user_html.read().decode("utf-8") if user_html else None
+    competitor_contents = [f.read().decode("utf-8") if f else None for f in competitor_html_files]
 
-            for file in competitor_html_files:
-                html = file.read().decode("utf-8")
+    if user_html_content and all(competitor_contents) and len(variation_list) > 0:
+        try:
+            competitor_data = []
+            for html in competitor_contents:
                 soup = BeautifulSoup(html, "html.parser")
                 word_count = len(soup.get_text().split())
                 variation_counts = {tag: 0 for tag in ["h2", "h3", "h4", "p"]}
@@ -112,6 +114,19 @@ if submitted:
             ranges = compute_benchmark_ranges(user_html_content, competitor_data, coefficients)
             st.subheader("Recommended Variation Ranges")
             st.json(ranges)
+
+            # Hidden debug download logic
+            debug_data = {
+                "user_word_count": len(user_html_content.split()),
+                "variation_list": variation_list,
+                "competitor_data": competitor_data,
+                "output_ranges": ranges
+            }
+            json_bytes = json.dumps(debug_data, indent=2).encode("utf-8")
+            b64 = base64.b64encode(json_bytes).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="debug_output.json" style="display:none">Download</a>'
+            st.markdown(href, unsafe_allow_html=True)
+
         except Exception as e:
             st.error(f"Error: {e}")
     else:
