@@ -6,7 +6,7 @@ import math
 def compute_benchmark_ranges(user_html, competitor_data, coefficients):
 
     def weighted_avg(values):
-        weights = [1.6, 1.5, 1.4, 1.3, 1.2, 1.0, 0.8, 0.6, 0.5, 0.4]  # reduce outlier weight
+        weights = [1.6, 1.5, 1.4, 1.3, 1.2, 1.0, 0.8, 0.6, 0.5, 0.4]
         return sum(v * w for v, w in zip(values, weights)) / sum(weights)
 
     def compute_word_count(html):
@@ -59,23 +59,58 @@ def compute_benchmark_ranges(user_html, competitor_data, coefficients):
 
 st.title("SEO Variation Range Calculator")
 
-user_html = st.text_area("Paste your HTML source (user page)")
-competitor_input = st.text_area("Paste competitor JSON data (list of dicts)")
+user_url = st.text_input("User Page URL")
+user_html = st.file_uploader("Upload User HTML File", type=["html"])
+
+competitor_urls = st.text_area("Paste Competitor URLs (1 per line)").splitlines()
+competitor_html_files = []
+
+if len(competitor_urls) == 10:
+    st.subheader("Upload HTML for Each Competitor")
+    for i, url in enumerate(competitor_urls):
+        uploaded = st.file_uploader(f"Upload HTML for Competitor {i+1}: {url}", type=["html"], key=f"c{i}")
+        competitor_html_files.append(uploaded)
+else:
+    st.warning("Please enter exactly 10 competitor URLs.")
+
+variations_input = st.text_area("Enter Variations (comma-separated)")
 
 if st.button("Compute Variation Ranges"):
-    if user_html and competitor_input:
+    if user_html and all(competitor_html_files) and variations_input:
         try:
-            competitor_data = json.loads(competitor_input)
+            user_html_content = user_html.read().decode("utf-8")
+            variation_list = [v.strip() for v in variations_input.split(",") if v.strip()]
+            competitor_data = []
+
+            for file in competitor_html_files:
+                html = file.read().decode("utf-8")
+                soup = BeautifulSoup(html, "html.parser")
+                word_count = len(soup.get_text().split())
+                variation_counts = {tag: 0 for tag in ["h2", "h3", "h4", "p"]}
+
+                for tag in variation_counts:
+                    tags = soup.find_all(tag)
+                    count = 0
+                    for t in tags:
+                        text = t.get_text(separator=" ").lower()
+                        for var in variation_list:
+                            var = var.lower()
+                            words = text.split()
+                            count += sum(1 for word in words if word == var)
+                    variation_counts[tag] = count
+
+                competitor_data.append({"word_count": word_count, "variation_counts": variation_counts})
+
             coefficients = {
                 "h2": (1.3, 2.0),
                 "h3": (0.4, 1.75),
                 "h4": (0.6, 1.5),
                 "p": (1.1, 1.5)
             }
-            ranges = compute_benchmark_ranges(user_html, competitor_data, coefficients)
+            ranges = compute_benchmark_ranges(user_html_content, competitor_data, coefficients)
             st.subheader("Recommended Variation Ranges")
             st.json(ranges)
         except Exception as e:
             st.error(f"Error: {e}")
     else:
-        st.warning("Please provide both user HTML and competitor JSON input.")
+        st.warning("Please provide all required inputs.")
