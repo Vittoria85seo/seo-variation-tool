@@ -1,6 +1,7 @@
+from bs4 import BeautifulSoup
+import math
+
 def compute_benchmark_ranges(user_html, competitor_data, coefficients):
-    import math
-    from bs4 import BeautifulSoup
 
     def weighted_avg(values):
         weights = [1.6, 1.5, 1.4, 1.3, 1.2, 1.0, 0.8, 0.6, 0.5, 0.4]  # reduce outlier weight
