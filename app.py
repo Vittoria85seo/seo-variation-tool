@@ -73,43 +73,48 @@ if len(competitor_urls) == 10:
 else:
     st.warning("Please enter exactly 10 competitor URLs.")
 
-variations_input = st.text_area("Enter Variations (comma-separated)")
+with st.form("variation_form"):
+    variations_input = st.text_area("Enter Variations (comma-separated)")
+    submitted = st.form_submit_button("Compute Variation Ranges")
 
-if st.button("Compute Variation Ranges"):
-    if user_html and all(competitor_html_files) and variations_input:
+if submitted:
+    if user_html and all(file is not None for file in competitor_html_files) and variations_input:
         try:
             user_html_content = user_html.read().decode("utf-8")
             variation_list = [v.strip() for v in variations_input.split(",") if v.strip()]
-            competitor_data = []
+            if len(variation_list) == 0:
+                st.warning("Variation list is empty after parsing.")
+            else:
+                competitor_data = []
 
-            for file in competitor_html_files:
-                html = file.read().decode("utf-8")
-                soup = BeautifulSoup(html, "html.parser")
-                word_count = len(soup.get_text().split())
-                variation_counts = {tag: 0 for tag in ["h2", "h3", "h4", "p"]}
+                for file in competitor_html_files:
+                    html = file.read().decode("utf-8")
+                    soup = BeautifulSoup(html, "html.parser")
+                    word_count = len(soup.get_text().split())
+                    variation_counts = {tag: 0 for tag in ["h2", "h3", "h4", "p"]}
 
-                for tag in variation_counts:
-                    tags = soup.find_all(tag)
-                    count = 0
-                    for t in tags:
-                        text = t.get_text(separator=" ").lower()
-                        for var in variation_list:
-                            var = var.lower()
-                            words = text.split()
-                            count += sum(1 for word in words if word == var)
-                    variation_counts[tag] = count
+                    for tag in variation_counts:
+                        tags = soup.find_all(tag)
+                        count = 0
+                        for t in tags:
+                            text = t.get_text(separator=" ").lower()
+                            for var in variation_list:
+                                var = var.lower()
+                                words = text.split()
+                                count += sum(1 for word in words if word == var)
+                        variation_counts[tag] = count
 
-                competitor_data.append({"word_count": word_count, "variation_counts": variation_counts})
+                    competitor_data.append({"word_count": word_count, "variation_counts": variation_counts})
 
-            coefficients = {
-                "h2": (1.3, 2.0),
-                "h3": (0.4, 1.75),
-                "h4": (0.6, 1.5),
-                "p": (1.1, 1.5)
-            }
-            ranges = compute_benchmark_ranges(user_html_content, competitor_data, coefficients)
-            st.subheader("Recommended Variation Ranges")
-            st.json(ranges)
+                coefficients = {
+                    "h2": (1.3, 2.0),
+                    "h3": (0.4, 1.75),
+                    "h4": (0.6, 1.5),
+                    "p": (1.1, 1.5)
+                }
+                ranges = compute_benchmark_ranges(user_html_content, competitor_data, coefficients)
+                st.subheader("Recommended Variation Ranges")
+                st.json(ranges)
         except Exception as e:
             st.error(f"Error: {e}")
     else:
