@@ -1,3 +1,5 @@
+import streamlit as st
+import json
 from bs4 import BeautifulSoup
 import math
 
@@ -54,3 +56,26 @@ def compute_benchmark_ranges(user_html, competitor_data, coefficients):
     )
 
     return ranges
+
+st.title("SEO Variation Range Calculator")
+
+user_html = st.text_area("Paste your HTML source (user page)")
+competitor_input = st.text_area("Paste competitor JSON data (list of dicts)")
+
+if st.button("Compute Variation Ranges"):
+    if user_html and competitor_input:
+        try:
+            competitor_data = json.loads(competitor_input)
+            coefficients = {
+                "h2": (1.3, 2.0),
+                "h3": (0.4, 1.75),
+                "h4": (0.6, 1.5),
+                "p": (1.1, 1.5)
+            }
+            ranges = compute_benchmark_ranges(user_html, competitor_data, coefficients)
+            st.subheader("Recommended Variation Ranges")
+            st.json(ranges)
+        except Exception as e:
+            st.error(f"Error: {e}")
+    else:
+        st.warning("Please provide both user HTML and competitor JSON input.")
